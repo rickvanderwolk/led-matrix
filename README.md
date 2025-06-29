@@ -5,6 +5,7 @@
 - [Hardware](#hardware)
 - [Connect LED matrix to Pi](#connect-led-matrix-to-pi)
 - [Install](#install)
+- [Modes](#modes)
 - [Change mode](#change-mode)
 - [Update](#update)
 
@@ -37,10 +38,16 @@
 
 You're all set, the LED matrix will start automatically.
 
+<a id="#modes"></a>
+## Modes
+
+- [evolving square](https://github.com/rickvanderwolk/led-matrix/tree/main/modes/evolving-square)
+- [pixels fighting](https://github.com/rickvanderwolk/led-matrix/tree/main/modes/pixels-fighting)
+
 <a id="#change-mode"></a>
 ## Change mode
 
-Change `selected_mode` in `config.json`. For example: `{"selected_mode": "evolving-square"}`.
+Change `selected_mode` in `config.json`. For example: `{"selected_mode": "evolving-square"}` (use the directory name of the mode in the `modes` directory). 
 
 Restart service with `sudo systemctl restart ledmatrix.service`
 
