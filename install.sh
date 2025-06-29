@@ -27,7 +27,6 @@ After=network.target
 ExecStart=$INSTALL_DIR/ledmatrix/bin/python3 $INSTALL_DIR/main.py
 WorkingDirectory=$INSTALL_DIR
 Restart=always
-User=$(whoami)
 Environment=PYTHONUNBUFFERED=1
 
 [Install]
