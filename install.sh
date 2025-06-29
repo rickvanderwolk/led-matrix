@@ -16,6 +16,40 @@ echo "Installing Python packages in virtualenv..."
 "$INSTALL_DIR/ledmatrix/bin/pip" install --upgrade pip
 "$INSTALL_DIR/ledmatrix/bin/pip" install rpi_ws281x adafruit-circuitpython-neopixel RPi.GPIO flask
 
+echo "Ensuring config.json exists with required keys (excluding placeholders)..."
+CONFIG_EXAMPLE="$INSTALL_DIR/config.example.json"
+CONFIG_TARGET="$INSTALL_DIR/config.json"
+
+if [ ! -f "$CONFIG_TARGET" ]; then
+  cp "$CONFIG_EXAMPLE" "$CONFIG_TARGET"
+  echo "config.json created from config.example.json"
+else
+  "$INSTALL_DIR/ledmatrix/bin/python3" - <<EOF
+import json
+import re
+from pathlib import Path
+
+example_path = Path("$CONFIG_EXAMPLE")
+target_path = Path("$CONFIG_TARGET")
+
+with example_path.open() as f:
+    example = json.load(f)
+
+with target_path.open() as f:
+    target = json.load(f)
+
+for key, value in example.items():
+    if key not in target:
+        if isinstance(value, str) and re.fullmatch(r"<.*?>", value):
+            continue
+        target[key] = value
+
+with target_path.open("w") as f:
+    json.dump(target, f, indent=4)
+EOF
+  echo "config.json updated with missing non-placeholder keys from config.example.json"
+fi
+
 echo "Creating systemd service file..."
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 sudo tee "$SERVICE_FILE" > /dev/null <<EOF
