@@ -1,25 +1,46 @@
+#!/usr/bin/env python3
+
 import board
 import neopixel
 import random
 import time
+import math
 
 LED_COUNT = 64
 PIN = board.D18
 BRIGHTNESS = 0.2
 
-current_color_pair_index = 0
-
 pixels = neopixel.NeoPixel(PIN, LED_COUNT, brightness=BRIGHTNESS)
 
+last_color_pair_index = -1
+
 def initialize_battlefield():
-    global current_color_pair_index
+    global last_color_pair_index
 
     contrasting_color_pairs = [
-        ((255, 0, 0),(0, 0, 255)),
+        ((255, 0, 0), (0, 0, 255)),
         ((255, 0, 0), (255, 255, 0)),
+        ((255, 0, 0), (0, 255, 0)),
+        ((0, 0, 255), (255, 255, 0)),
+        ((255, 0, 255), (0, 255, 255)),
+        ((255, 165, 0), (0, 128, 255)),
+        ((128, 0, 128), (0, 255, 128)),
+        ((57, 255, 20), (255, 20, 147)),
+        ((0, 255, 255), (255, 105, 180)),
+        ((255, 192, 203), (0, 0, 255)),
+        ((255, 255, 224), (255, 69, 0)),
+        ((139, 69, 19), (173, 255, 47)),
+        ((70, 130, 180), (255, 215, 0)),
+        ((0, 0, 0), (255, 255, 255)),
+        ((50, 50, 50), (255, 0, 255)),
     ]
 
-    color1, color2 = contrasting_color_pairs[current_color_pair_index]
+    new_index = last_color_pair_index
+    while new_index == last_color_pair_index:
+        new_index = random.randint(0, len(contrasting_color_pairs) - 1)
+
+    last_color_pair_index = new_index
+    color1, color2 = contrasting_color_pairs[new_index]
 
     for i in range(LED_COUNT):
         if i % 8 < 4:
@@ -28,11 +49,6 @@ def initialize_battlefield():
             pixels[i] = color2
 
     pixels.show()
-
-    current_color_pair_index += 1
-    if current_color_pair_index >= len(contrasting_color_pairs):
-        current_color_pair_index = 0
-
     return color1, color2
 
 def colors_are_similar(color1, color2, tolerance=10):
@@ -60,13 +76,11 @@ def is_neighbor_same_color(x, y, color):
                 return True
     return False
 
-import math
-
 def fight(color1, color2):
     fight = True
     exponent = random.uniform(0.1, 0.3)
 
-    while(fight):
+    while fight:
         x, y = random.randint(0, 7), random.randint(0, 7)
         opponent_x = random.randint(0, 7)
         opponent_index = y * 8 + opponent_x
