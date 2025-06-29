@@ -2,7 +2,7 @@
 
 set -e
 
-INSTALL_DIR=$(pwd)
+INSTALL_DIR=$(cd "$(dirname "$0")" && pwd)
 SERVICE_NAME=ledmatrix
 
 echo "Installing system packages..."
@@ -47,4 +47,4 @@ sudo systemctl daemon-reload
 sudo systemctl enable "$SERVICE_NAME"
 sudo systemctl restart "$SERVICE_NAME"
 
-echo "✅ Install complete. Service is running."
+echo "✅ Done! The LED matrix is now running and will auto-start on reboot."

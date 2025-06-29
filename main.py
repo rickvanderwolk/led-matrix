@@ -5,8 +5,9 @@ import os
 import time
 import subprocess
 
-CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
-MODES_DIR = os.path.join(os.path.dirname(__file__), "modes")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
+MODES_DIR = os.path.join(BASE_DIR, "modes")
 
 def load_config():
     if os.path.exists(CONFIG_PATH):
@@ -23,8 +24,7 @@ def main():
             time.sleep(5)
             continue
 
-        mode_path = os.path.join(MODES_DIR, mode)
-        script_path = os.path.join(mode_path, "main.py")
+        script_path = os.path.join(MODES_DIR, mode, "main.py")
 
         if not os.path.exists(script_path):
             print(f"No script found for mode: {mode}")
@@ -32,7 +32,7 @@ def main():
             continue
 
         print(f"Running mode: {mode}")
-        subprocess.run(["/usr/bin/sudo", os.path.join(os.path.dirname(__file__), "ledmatrix", "bin", "python3"), script_path])
+        subprocess.run([os.path.join(BASE_DIR, "ledmatrix", "bin", "python3"), script_path])
         print("Script exited. Restarting in 5 seconds...")
         time.sleep(5)
 
