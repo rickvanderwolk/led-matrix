@@ -4,6 +4,7 @@
 - [Connect LED matrix to Pi](#connect-led-matrix-to-pi)
 - [Install](#install)
 - [Change mode](#change-mode)
+- [Update](#update)
 
 <a id="hardware"></a>
 ## Hardware
@@ -40,3 +41,10 @@ You're all set, the LED matrix will start automatically.
 Change `selected_mode` in `config.json`. For example: `{"selected_mode": "evolving-square"}`.
 
 Restart service with `sudo systemctl restart ledmatrix.service`
+
+<a id="update"></a>
+## Update
+
+Update to latest version. 
+
+`cd ~/led-matrix && git pull && bash install.sh`
