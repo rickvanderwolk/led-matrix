@@ -16,13 +16,6 @@ echo "Installing Python packages in virtualenv..."
 "$INSTALL_DIR/ledmatrix/bin/pip" install --upgrade pip
 "$INSTALL_DIR/ledmatrix/bin/pip" install rpi_ws281x adafruit-circuitpython-neopixel RPi.GPIO flask
 
-echo "Creating default config.json..."
-cat > "$INSTALL_DIR/config.json" <<EOF
-{
-  "selected_mode": null
-}
-EOF
-
 echo "Creating systemd service file..."
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 sudo tee "$SERVICE_FILE" > /dev/null <<EOF
