@@ -42,6 +42,7 @@ You're all set, the LED matrix will start automatically.
 ## Modes
 
 - [evolving square](https://github.com/rickvanderwolk/led-matrix/tree/main/modes/evolving-square)
+- [led-sort](https://github.com/rickvanderwolk/led-matrix/tree/main/modes/led-sort)
 - [pixels fighting](https://github.com/rickvanderwolk/led-matrix/tree/main/modes/pixels-fighting)
 
 <a id="#change-mode"></a>
