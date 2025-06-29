@@ -1,6 +1,6 @@
 # LED matrix
 
-![preview](assets/preview.png)
+<img src="assets/preview.png" alt="preview" width="500">
 
 - [Hardware](#hardware)
 - [Connect LED matrix to Pi](#connect-led-matrix-to-pi)
