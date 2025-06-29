@@ -1,5 +1,7 @@
 # LED matrix
 
+![preview](assets/preview.png)
+
 - [Hardware](#hardware)
 - [Connect LED matrix to Pi](#connect-led-matrix-to-pi)
 - [Install](#install)
