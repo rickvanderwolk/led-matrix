@@ -410,7 +410,7 @@ algorithms = [
     ("cycle", cycle_sort),
     ("slow", slow_sort),
     ("odd_even_trans", odd_even_transposition_sort),
-    ("bogosort", bogosort)
+    # ("bogosort", bogosort)
 ]
 
 while True:
