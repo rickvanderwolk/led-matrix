@@ -1,14 +1,21 @@
+import os
+import json
 import time
 import random
 import board
 import neopixel
 
+CONFIG_PATH = os.environ.get("LEDMATRIX_CONFIG", "config.json")
+with open(CONFIG_PATH) as f:
+    config = json.load(f)
+
 LED_COUNT = 64
-BRIGHTNESS = 0.2
+PIN = board.D18
+BRIGHTNESS = config.get("brightness", 0.2)
 SLEEP_BETWEEN_CHANGES = 0.1
 SLEEP_BETWEEN_ALGORITHMS = 2
 
-matrix = neopixel.NeoPixel(board.D18, LED_COUNT, brightness=BRIGHTNESS, auto_write=False)
+matrix = neopixel.NeoPixel(PIN, LED_COUNT, brightness=BRIGHTNESS, auto_write=False)
 
 def get_matrix_index(i):
     return i

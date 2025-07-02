@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
 
+import os
+import json
 import board
 import neopixel
 import random
 import time
 
+CONFIG_PATH = os.environ.get("LEDMATRIX_CONFIG", "config.json")
+with open(CONFIG_PATH) as f:
+    config = json.load(f)
+
 LED_COUNT = 64
 PIN = board.D18
-BRIGHTNESS = 0.2
+BRIGHTNESS = config.get("brightness", 0.2)
 
 pixels = neopixel.NeoPixel(PIN, LED_COUNT, brightness=BRIGHTNESS, auto_write=False)
-
 squares = [[0, 255, 0] for _ in range(LED_COUNT)]
 
 def update_one(squares):
