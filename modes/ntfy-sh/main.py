@@ -1,3 +1,4 @@
+import os
 import json
 import board
 import neopixel
@@ -6,9 +7,13 @@ import websocket
 LED_COUNT = 64
 PIN = board.D18
 BRIGHTNESS = 0.2
+CONFIG_PATH = os.environ.get("LEDMATRIX_CONFIG", "config.json")
 
 pixels = neopixel.NeoPixel(PIN, LED_COUNT, brightness=BRIGHTNESS, auto_write=False)
 current = [[0, 0, 0] for _ in range(LED_COUNT)]
+
+with open(CONFIG_PATH) as f:
+    config = json.load(f)
 
 def render(squares):
     for i in range(LED_COUNT):
@@ -59,7 +64,12 @@ def on_message(ws, message):
     except:
         pass
 
-ws = websocket.WebSocketApp("wss://ntfy.sh/<topic-from-config>/ws", on_message=on_message)
+topic = config.get("ntfy-sh", {}).get("topic")
+if not topic:
+    raise ValueError("No ntfy.sh topic found in config.json")
+
+ws_url = f"wss://ntfy.sh/{topic}/ws"
+ws = websocket.WebSocketApp(ws_url, on_message=on_message)
 
 try:
     ws.run_forever()

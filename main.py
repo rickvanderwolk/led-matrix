@@ -13,12 +13,13 @@ def load_config():
     if os.path.exists(CONFIG_PATH):
         with open(CONFIG_PATH) as f:
             return json.load(f)
-    return {"selected_mode": None}
+    return {}
 
 def main():
     while True:
         config = load_config()
         mode = config.get("selected_mode")
+
         if not mode:
             print("No mode selected. Waiting...")
             time.sleep(5)
@@ -32,7 +33,15 @@ def main():
             continue
 
         print(f"Running mode: {mode}")
-        subprocess.run([os.path.join(BASE_DIR, "ledmatrix", "bin", "python3"), script_path])
+
+        env = os.environ.copy()
+        env["LEDMATRIX_CONFIG"] = CONFIG_PATH  # kan ook hardcoded blijven, of BASE_DIR gebruiken
+
+        subprocess.run(
+            [os.path.join(BASE_DIR, "ledmatrix", "bin", "python3"), script_path],
+            env=env
+        )
+
         print("Script exited. Restarting in 5 seconds...")
         time.sleep(5)
 
