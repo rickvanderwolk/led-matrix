@@ -7,6 +7,7 @@
 - [Install](#install)
 - [Modes](#modes)
 - [Change mode](#change-mode)
+- [Change brightness](#change-brightness)
 - [Update](#update)
 
 <a id="hardware"></a>
@@ -43,12 +44,20 @@ You're all set, the LED matrix will start automatically.
 
 - [evolving square](https://github.com/rickvanderwolk/led-matrix/tree/main/modes/evolving-square)
 - [led-sort](https://github.com/rickvanderwolk/led-matrix/tree/main/modes/led-sort)
+- [ntfy-sh](https://github.com/rickvanderwolk/led-matrix/tree/main/modes/ntfy-sh)
 - [pixels fighting](https://github.com/rickvanderwolk/led-matrix/tree/main/modes/pixels-fighting)
 
 <a id="#change-mode"></a>
 ## Change mode
 
 Change `selected_mode` in `config.json`. For example: `{"selected_mode": "evolving-square"}` (use the directory name of the mode in the `modes` directory). 
+
+Restart service with `sudo systemctl restart ledmatrix.service`
+
+<a id="#change-brightness"></a>
+## Change brightness
+
+Change `brightness` in `config.json`. For example: `{"brightness": 0.25}` (use 0 to 1).
 
 Restart service with `sudo systemctl restart ledmatrix.service`
 
