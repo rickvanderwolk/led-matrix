@@ -1,17 +1,22 @@
 #!/usr/bin/env python3
 
+import os
+import json
 import board
 import neopixel
 import random
 import time
 import math
 
+CONFIG_PATH = os.environ.get("LEDMATRIX_CONFIG", "config.json")
+with open(CONFIG_PATH) as f:
+    config = json.load(f)
+
 LED_COUNT = 64
 PIN = board.D18
-BRIGHTNESS = 0.2
+BRIGHTNESS = config.get("brightness", 0.2)
 
 pixels = neopixel.NeoPixel(PIN, LED_COUNT, brightness=BRIGHTNESS)
-
 last_color_pair_index = -1
 
 def initialize_battlefield():
