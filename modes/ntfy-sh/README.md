@@ -29,7 +29,13 @@ For example:
 }
 ```
 
-Replace `<your-ntfy-sh-topic>` with your topic in the example below. For example `90ad44f3b530`.
+Replace `<your-ntfy-sh-topic>` with your topic in the examples below. 
+
+For example:
+
+```
+curl -d '{"data": {"index": 0}}' https://ntfy.sh/90ad44f3b530
+```
 
 <a id="update-using-curl"></a>
 ## Update using curl
