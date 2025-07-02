@@ -4,16 +4,16 @@ import board
 import neopixel
 import websocket
 
+CONFIG_PATH = os.environ.get("LEDMATRIX_CONFIG", "config.json")
+with open(CONFIG_PATH) as f:
+    config = json.load(f)
+
 LED_COUNT = 64
 PIN = board.D18
-BRIGHTNESS = 0.2
-CONFIG_PATH = os.environ.get("LEDMATRIX_CONFIG", "config.json")
+BRIGHTNESS = config.get("brightness", 0.2)
 
 pixels = neopixel.NeoPixel(PIN, LED_COUNT, brightness=BRIGHTNESS, auto_write=False)
 current = [[0, 0, 0] for _ in range(LED_COUNT)]
-
-with open(CONFIG_PATH) as f:
-    config = json.load(f)
 
 def render(squares):
     for i in range(LED_COUNT):
