@@ -2,6 +2,8 @@
 
 Use ntfy.sh to update the LED matrix in real time via WebSockets.
 
+Build bar graphs, pixel creatures, or just see where your imagination takes you.
+
 - [Getting started](#getting-started)
 - [Update using curl](#update-using-curl)
 
