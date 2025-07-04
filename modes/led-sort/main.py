@@ -1,13 +1,17 @@
+#!/usr/bin/env python3
+
 import os
+import sys
 import json
 import time
 import random
 import board
 import neopixel
 
-CONFIG_PATH = os.environ.get("LEDMATRIX_CONFIG", "config.json")
-with open(CONFIG_PATH) as f:
-    config = json.load(f)
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
+from utils.matrix_config import load_config, apply_transform
+
+config = load_config()
 
 LED_COUNT = 64
 PIN = board.D18
@@ -15,10 +19,12 @@ BRIGHTNESS = config.get("brightness", 0.2)
 SLEEP_BETWEEN_CHANGES = 0.1
 SLEEP_BETWEEN_ALGORITHMS = 2
 
+pixel_map = [apply_transform(i, config) for i in range(LED_COUNT)]
+
 matrix = neopixel.NeoPixel(PIN, LED_COUNT, brightness=BRIGHTNESS, auto_write=False)
 
 def get_matrix_index(i):
-    return i
+    return pixel_map[i]
 
 def update_leds(array, changed_indices=None):
     for i in range(LED_COUNT):

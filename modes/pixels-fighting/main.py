@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import sys
 import json
 import board
 import neopixel
@@ -8,16 +9,27 @@ import random
 import time
 import math
 
-CONFIG_PATH = os.environ.get("LEDMATRIX_CONFIG", "config.json")
-with open(CONFIG_PATH) as f:
-    config = json.load(f)
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
+from utils.matrix_config import load_config, apply_transform
+
+config = load_config()
 
 LED_COUNT = 64
 PIN = board.D18
 BRIGHTNESS = config.get("brightness", 0.2)
 
 pixels = neopixel.NeoPixel(PIN, LED_COUNT, brightness=BRIGHTNESS)
+
+# ✅ Voorgecalculeerde pixel index mapping
+pixel_map = [apply_transform(i, config) for i in range(LED_COUNT)]
+
 last_color_pair_index = -1
+
+def set_pixel(i, color):
+    pixels[pixel_map[i]] = color
+
+def get_pixel(i):
+    return pixels[pixel_map[i]]
 
 def initialize_battlefield():
     global last_color_pair_index
@@ -49,9 +61,9 @@ def initialize_battlefield():
 
     for i in range(LED_COUNT):
         if i % 8 < 4:
-            pixels[i] = color1
+            set_pixel(i, color1)
         else:
-            pixels[i] = color2
+            set_pixel(i, color2)
 
     pixels.show()
     return color1, color2
@@ -62,7 +74,7 @@ def colors_are_similar(color1, color2, tolerance=10):
 def count_color(target_color):
     count = 0
     for i in range(LED_COUNT):
-        if colors_are_similar(pixels[i], target_color):
+        if colors_are_similar(get_pixel(i), target_color):
             count += 1
     return count
 
@@ -76,10 +88,15 @@ def is_neighbor_same_color(x, y, color):
 
     for nx, ny in direct_neighbors:
         if 0 <= nx < 8 and 0 <= ny < 8:
-            neighbor_index = ny * 8 + nx
-            if colors_are_similar(pixels[neighbor_index], color, tolerance=10):
+            logical_index = ny * 8 + nx
+            if colors_are_similar(get_pixel(logical_index), color, tolerance=10):
                 return True
     return False
+
+def fill_all(color):
+    for i in range(LED_COUNT):
+        set_pixel(i, color)
+    pixels.show()
 
 def fight(color1, color2):
     fight = True
@@ -88,12 +105,12 @@ def fight(color1, color2):
     while fight:
         x, y = random.randint(0, 7), random.randint(0, 7)
         opponent_x = random.randint(0, 7)
-        opponent_index = y * 8 + opponent_x
+        logical_index = y * 8 + opponent_x
 
         attacking_color = color1 if x < 4 else color2
         defending_color = color2 if x < 4 else color1
 
-        if is_neighbor_same_color(opponent_x, y, attacking_color) and not colors_are_similar(pixels[opponent_index], attacking_color):
+        if is_neighbor_same_color(opponent_x, y, attacking_color) and not colors_are_similar(get_pixel(logical_index), attacking_color):
             color1_count = count_color(color1)
             color2_count = count_color(color2)
             total_count = color1_count + color2_count
@@ -109,17 +126,17 @@ def fight(color1, color2):
             else:
                 winner_color = color2 if random.random() < chance_color2 else defending_color
 
-            pixels[opponent_index] = winner_color
+            set_pixel(logical_index, winner_color)
 
         pixels.show()
 
         if count_color(color1) > LED_COUNT - 1:
-            pixels.fill(color1)
+            fill_all(color1)
             fight = False
             time.sleep(1)
             break
         elif count_color(color2) > LED_COUNT - 1:
-            pixels.fill(color2)
+            fill_all(color2)
             fight = False
             time.sleep(1)
             break
@@ -130,5 +147,4 @@ try:
         fight(color1, color2)
         time.sleep(1)
 except KeyboardInterrupt:
-    pixels.fill((0, 0, 0))
-    pixels.show()
+    fill_all((0, 0, 0))

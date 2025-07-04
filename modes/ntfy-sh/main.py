@@ -1,23 +1,29 @@
+#!/usr/bin/env python3
+
 import os
+import sys
 import json
 import board
 import neopixel
 import websocket
 
-CONFIG_PATH = os.environ.get("LEDMATRIX_CONFIG", "config.json")
-with open(CONFIG_PATH) as f:
-    config = json.load(f)
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
+from utils.matrix_config import load_config, apply_transform
+
+config = load_config()
 
 LED_COUNT = 64
 PIN = board.D18
 BRIGHTNESS = config.get("brightness", 0.2)
+
+pixel_map = [apply_transform(i, config) for i in range(LED_COUNT)]
 
 pixels = neopixel.NeoPixel(PIN, LED_COUNT, brightness=BRIGHTNESS, auto_write=False)
 current = [[0, 0, 0] for _ in range(LED_COUNT)]
 
 def render(squares):
     for i in range(LED_COUNT):
-        pixels[i] = tuple(squares[i])
+        pixels[pixel_map[i]] = tuple(squares[i])
     pixels.show()
 
 def handle_message(payload):
