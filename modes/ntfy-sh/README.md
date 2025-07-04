@@ -23,8 +23,10 @@ For example:
 ```
 {
   "selected_mode": "ntfy-sh",
-  "ntfy-sh": {
-    "topic": "90ad44f3b530"
+  "modes": {
+    "ntfy-sh": {
+      "topic": "90ad44f3b530"
+    }
   }
 }
 ```

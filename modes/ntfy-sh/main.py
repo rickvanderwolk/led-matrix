@@ -64,7 +64,7 @@ def on_message(ws, message):
     except:
         pass
 
-topic = config.get("ntfy-sh", {}).get("topic")
+topic = config.get("modes", {}).get("ntfy-sh", {}).get("topic")
 if not topic:
     raise ValueError("No ntfy.sh topic found in config.json")
 
