@@ -21,15 +21,22 @@ def get_matrix_index(i):
     return i
 
 def update_leds(array, changed_indices=None):
+    updated = False
     for i in range(LED_COUNT):
         idx = get_matrix_index(i)
         if changed_indices and i in changed_indices:
-            matrix[idx] = (255, 255, 255)
+            new_color = (255, 255, 255)
         elif array[i] == i:
-            matrix[idx] = (0, 255, 0)
+            new_color = (0, 255, 0)
         else:
-            matrix[idx] = (255, 0, 0)
-    matrix.show()
+            new_color = (255, 0, 0)
+
+        if matrix[idx] != new_color:
+            matrix[idx] = new_color
+            updated = True
+
+    if updated:
+        matrix.show()
 
 def shuffled_array():
     values = list(range(LED_COUNT))
