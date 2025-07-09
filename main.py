@@ -35,7 +35,7 @@ def main():
         print(f"Running mode: {mode}")
 
         env = os.environ.copy()
-        env["LEDMATRIX_CONFIG"] = CONFIG_PATH  # kan ook hardcoded blijven, of BASE_DIR gebruiken
+        env["LEDMATRIX_CONFIG"] = CONFIG_PATH
 
         subprocess.run(
             [os.path.join(BASE_DIR, "ledmatrix", "bin", "python3"), script_path],
