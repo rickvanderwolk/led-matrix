@@ -109,22 +109,20 @@ def fight(color1, color2):
             else:
                 winner_color = color2 if random.random() < chance_color2 else defending_color
 
-            if not colors_are_similar(pixels[opponent_index], winner_color):
-                pixels[opponent_index] = winner_color
-                pixels.show()
+            pixels[opponent_index] = winner_color
 
-            if color1_count > LED_COUNT - 1:
-                pixels.fill(color1)
-                pixels.show()
-                fight = False
-                time.sleep(1)
-                break
-            elif color2_count > LED_COUNT - 1:
-                pixels.fill(color2)
-                pixels.show()
-                fight = False
-                time.sleep(1)
-                break
+        pixels.show()
+
+        if count_color(color1) > LED_COUNT - 1:
+            pixels.fill(color1)
+            fight = False
+            time.sleep(1)
+            break
+        elif count_color(color2) > LED_COUNT - 1:
+            pixels.fill(color2)
+            fight = False
+            time.sleep(1)
+            break
 
 try:
     while True:
