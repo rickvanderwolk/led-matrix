@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width">
+    <title>Connect 4</title>
+</head>
+<body>
+<h2>Connect 4</h2>
+<p>Kies een kolom:</p>
+<div style="display:flex;gap:5px;">
+    <button onclick="move(0)">1</button>
+    <button onclick="move(1)">2</button>
+    <button onclick="move(2)">3</button>
+    <button onclick="move(3)">4</button>
+    <button onclick="move(4)">5</button>
+    <button onclick="move(5)">6</button>
+    <button onclick="move(6)">7</button>
+    <button onclick="move(7)">8</button>
+</div>
+<script>
+    function move(col) {
+        fetch("/move", {
+            method: "POST",
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({column: col})
+        });
+    }
+</script>
+</body>
+</html>
