@@ -1,113 +1,95 @@
 #!/usr/bin/env python3
-
-import os
-import json
-import board
-import neopixel
-import time
-import threading
-from flask import Flask, request, send_from_directory
-
-CONFIG_PATH = os.environ.get("LEDMATRIX_CONFIG", "config.json")
-with open(CONFIG_PATH) as f:
-    config = json.load(f)
-
-LED_COUNT = 64
-PIN = board.D18
-BRIGHTNESS = config.get("brightness", 0.2)
-
-pixels = neopixel.NeoPixel(PIN, LED_COUNT, brightness=BRIGHTNESS, auto_write=False)
-app = Flask(__name__, static_folder='.')
+import board, neopixel, flask, json, os, threading, time
 
 WIDTH, HEIGHT = 8, 8
-board_state = [[0 for _ in range(WIDTH)] for _ in range(HEIGHT)]
-current_player = 1
-winner = None
-lock = threading.Lock()
+SERPENTINE = False
+FLIP_X = False
+FLIP_Y = False
 
-def xy_to_index(x, y):
-    if y % 2 == 0:
-        return y * WIDTH + x
-    else:
-        return y * WIDTH + (WIDTH - 1 - x)
+COLOR_P1 = (255, 0, 0)
+COLOR_P2 = (0, 0, 255)
+FLASH    = (255, 255, 255)
 
-def draw_board():
+LED_COUNT = WIDTH * HEIGHT
+PIN = board.D18
+try:
+    with open(os.environ.get("LEDMATRIX_CONFIG","config.json")) as f:
+        BRIGHT = json.load(f).get("brightness", 0.2)
+except: BRIGHT = 0.2
+
+pixels = neopixel.NeoPixel(PIN, LED_COUNT, brightness=BRIGHT, auto_write=False)
+app    = flask.Flask(__name__, static_folder='.')
+
+board_state     = [[0]*WIDTH for _ in range(HEIGHT)]
+current_player  = 1
+winner          = None
+lock            = threading.Lock()
+
+def map_xy(x,y):
+    if FLIP_X: x = WIDTH-1-x
+    if FLIP_Y: y = HEIGHT-1-y
+    if SERPENTINE and y%2: x = WIDTH-1-x
+    return y*WIDTH + x
+
+def draw(highlight=None):
     for y in range(HEIGHT):
         for x in range(WIDTH):
             v = board_state[y][x]
-            if v == 0:
-                color = (0, 0, 0)
-            elif v == 1:
-                color = (255, 0, 0)
-            elif v == 2:
-                color = (0, 0, 255)
-            else:
-                color = (255, 255, 0)
-            pixels[xy_to_index(x, y)] = color
+            col = COLOR_P1 if v==1 else COLOR_P2 if v==2 else (0,0,0)
+            if highlight and (y,x) in highlight: col = FLASH
+            pixels[map_xy(x,y)] = col
+    indicator = COLOR_P1 if current_player==1 else COLOR_P2
+    pixels[map_xy(WIDTH-1,0)] = indicator
     pixels.show()
 
-def drop_piece(col):
-    global current_player, winner
-    with lock:
-        if winner:
-            return
-        for y in range(HEIGHT - 1, -1, -1):
-            if board_state[y][col] == 0:
-                board_state[y][col] = current_player
-                if check_win(y, col):
-                    winner = current_player
-                    highlight_winner()
-                else:
-                    current_player = 2 if current_player == 1 else 1
-                return
-        # Kolom vol: doe niks
-        return
-
-def check_win(r, c):
+def four(r,c):
     p = board_state[r][c]
-    directions = [(1,0), (0,1), (1,1), (1,-1)]
-    for dx, dy in directions:
-        count = 1
-        for s in [1, -1]:
-            for i in range(1, 4):
-                x = c + dx * i * s
-                y = r + dy * i * s
-                if 0 <= x < WIDTH and 0 <= y < HEIGHT and board_state[y][x] == p:
-                    count += 1
-                else:
-                    break
-        if count >= 4:
-            return True
-    return False
+    for dx,dy in ((1,0),(0,1),(1,1),(1,-1)):
+        pts=[(r,c)]
+        for s in (1,-1):
+            for i in range(1,4):
+                x,y=c+dx*i*s, r+dy*i*s
+                if 0<=x<WIDTH and 0<=y<HEIGHT and board_state[y][x]==p:
+                    pts.append((y,x))
+                else: break
+        if len(pts)>=4: return pts[:4]
+    return None
 
-def highlight_winner():
+def blink(coords):
     for _ in range(10):
-        for i in range(LED_COUNT):
-            pixels[i] = (255, 255, 0)
-        pixels.show()
-        time.sleep(0.1)
-        for i in range(LED_COUNT):
-            pixels[i] = (0, 0, 0)
-        pixels.show()
-        time.sleep(0.1)
+        draw(coords); time.sleep(0.25)
+        draw();       time.sleep(0.25)
+
+def reset():
+    global board_state,current_player,winner
+    board_state=[[0]*WIDTH for _ in range(HEIGHT)]
+    current_player=1; winner=None; draw()
+
+def drop(col):
+    global current_player,winner
+    if winner: return
+    for y in range(HEIGHT-1,-1,-1):
+        if board_state[y][col]==0:
+            board_state[y][col]=current_player
+            coords=four(y,col)
+            if coords:
+                winner=current_player
+                draw(coords); blink(coords); reset()
+            else:
+                current_player = 3-current_player
+                draw()
+            return
 
 @app.route('/')
-def root():
-    return send_from_directory('.', 'index.html')
+def root(): return flask.send_from_directory('.', 'index.html')
 
 @app.route('/move', methods=['POST'])
 def move():
-    data = request.get_json()
-    col = data.get('column')
-    if isinstance(col, int) and 0 <= col < WIDTH:
-        drop_piece(col)
-    return ('', 204)
+    col = flask.request.get_json().get('column')
+    if isinstance(col,int) and 0<=col<WIDTH:
+        with lock: drop(col)
+    return ('',204)
 
-def loop():
-    while True:
-        draw_board()
-        time.sleep(0.1)
-
-if __name__ == '__main__':
-    threading.Thread(target=loop, daemon=True).start()
+if __name__=='__main__':
+    draw()
     app.run(host='0.0.0.0', port=5000)
