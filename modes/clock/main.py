@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import os,json,time,board,neopixel
+import os,json,time,board,neopixel,colorsys,random
 from datetime import datetime
 
 CONFIG_PATH=os.environ.get("LEDMATRIX_CONFIG","config.json")
@@ -10,23 +10,14 @@ PIN=board.D18
 WIDTH=int(config.get("width",8))
 HEIGHT=int(config.get("height",8))
 LED_COUNT=WIDTH*HEIGHT
-BRIGHTNESS=float(config.get("brightness",0.25))
-SPEED=float(config.get("speed",0.08))
+BRIGHTNESS=float(config.get("brightness",0.28))
+SPEED=float(config.get("speed",0.05))
 FLIP_X=bool(config.get("flip_x",False))
 FLIP_Y=bool(config.get("flip_y",False))
 SERPENTINE=bool(config.get("serpentine",False))
-FG=tuple(config.get("fg_color",(255,255,255)))
-BORDER_EMPTY=tuple(config.get("border_empty",(40,40,40)))
-BORDER_FILL=tuple(config.get("border_fill",(0,200,255)))
 BG=(0,0,0)
 
 pixels=neopixel.NeoPixel(PIN,LED_COUNT,brightness=BRIGHTNESS,auto_write=False)
-
-def map_xy(x,y):
-    if FLIP_X: x=WIDTH-1-x
-    if FLIP_Y: y=HEIGHT-1-y
-    if SERPENTINE and y%2: x=WIDTH-1-x
-    return y*WIDTH+x
 
 font3x6={
     0:[0b111,0b101,0b101,0b101,0b101,0b111],
@@ -41,49 +32,98 @@ font3x6={
     9:[0b111,0b101,0b111,0b001,0b001,0b111]
 }
 
-def border_path():
+def map_xy(x,y):
+    if FLIP_X: x=WIDTH-1-x
+    if FLIP_Y: y=HEIGHT-1-y
+    if SERPENTINE and y%2: x=WIDTH-1-x
+    return y*WIDTH+x
+
+def digit_mask(hh):
+    a=int(hh[0]); b=int(hh[1])
+    m=set()
+    for r in range(6):
+        row=font3x6[a][r]
+        for c in range(3):
+            if (row>>(2-c))&1: m.add((1+c,1+r))
+        row=font3x6[b][r]
+        for c in range(3):
+            if (row>>(2-c))&1: m.add((4+c,1+r))
+    return m
+
+def gradient_colors(n,h1,h2,s=1.0,v=1.0):
+    cols=[]
+    for i in range(n):
+        t=i/max(1,n-1)
+        h=(h1+(h2-h1)*t)%360
+        r,g,b=colorsys.hsv_to_rgb(h/360.0,s,v)
+        cols.append((int(r*255),int(g*255),int(b*255)))
+    return cols
+
+def bottom_up_order():
     pts=[]
-    for x in range(0,8): pts.append((x,0))
-    for y in range(1,7): pts.append((7,y))
-    for x in range(7,-1,-1): pts.append((x,7))
-    for y in range(6,0,-1): pts.append((0,y))
+    for y in range(HEIGHT-1,-1,-1):
+        for x in range(WIDTH):
+            pts.append((x,y))
     return pts
 
-BORDER_POINTS=border_path()
-PERIM=len(BORDER_POINTS)
+def fill_frame_bottom(mask,order,progress,cols):
+    background=[p for p in order if p not in mask]
+    lit_count=int(progress*len(background))
+    frame=[[BG for _ in range(WIDTH)] for __ in range(HEIGHT)]
+    for i,p in enumerate(background[:lit_count]):
+        x,y=p
+        frame[y][x]=cols[min(i,len(cols)-1)]
+    for (x,y) in mask:
+        frame[y][x]=BG
+    return frame
 
-def draw_border(progress):
-    filled=int(PERIM*progress+0.5)
-    for i,(x,y) in enumerate(BORDER_POINTS):
-        pixels[map_xy(x,y)]=BORDER_FILL if i<filled else BORDER_EMPTY
+def draw(frame):
+    for y in range(HEIGHT):
+        for x in range(WIDTH):
+            pixels[map_xy(x,y)]=frame[y][x]
+    pixels.show()
 
-def draw_digit_3x6(d,x0,y0,color):
-    rows=font3x6[int(d)]
-    for r in range(6):
-        row=rows[r]
-        for c in range(3):
-            if (row>>(2-c))&1:
-                pixels[map_xy(x0+c,y0+r)]=color
-
-def hour_digits_and_min_progress():
-    n=datetime.now()
-    hh=n.strftime("%H")
-    m=int(n.strftime("%M"))
-    prog=m/60.0
-    return int(hh[0]),int(hh[1]),prog
+def gravity_fall(frame,steps=30,delay=0.03):
+    for _ in range(steps):
+        moved=False
+        for y in range(HEIGHT-2,-1,-1):
+            for x in range(WIDTH):
+                c=frame[y][x]
+                if c!=BG and frame[y+1][x]==BG:
+                    frame[y+1][x]=c
+                    frame[y][x]=BG
+                    moved=True
+        draw(frame)
+        time.sleep(delay)
+        if not moved: break
 
 try:
-    last_tuple=None
+    order=bottom_up_order()
+    last_hour=None
+    h1=random.uniform(0,360)
+    h2=(h1+random.uniform(120,220))%360
+    cols=gradient_colors(LED_COUNT,h1,h2,1.0,1.0)
     while True:
-        h1,h2,prog=hour_digits_and_min_progress()
-        key=(h1,h2,int(prog*60))
-        if key!=last_tuple:
-            pixels.fill(BG)
-            draw_border(prog)
-            draw_digit_3x6(h1,1,1,FG)
-            draw_digit_3x6(h2,4,1,FG)
-            pixels.show()
-            last_tuple=key
+        now=datetime.now()
+        hh=now.strftime("%H")
+        mm=int(now.strftime("%M"))
+        ss=int(now.strftime("%S"))
+        if last_hour is None:
+            last_hour=int(hh)
+        if int(hh)!=last_hour and mm==0 and ss==0:
+            m_prev=digit_mask(f"{last_hour:02d}")
+            frame=fill_frame_bottom(m_prev,order,1.0,cols)
+            gravity_fall(frame,steps=40,delay=max(0.01,SPEED*0.6))
+            frame=[[BG for _ in range(WIDTH)] for __ in range(HEIGHT)]
+            draw(frame)
+            last_hour=int(hh)
+            h1=(h1+random.uniform(90,180))%360
+            h2=(h1+random.uniform(120,220))%360
+            cols=gradient_colors(LED_COUNT,h1,h2,1.0,1.0)
+        mask=digit_mask(hh)
+        progress=(mm*60+ss)/3600.0
+        frame=fill_frame_bottom(mask,order,progress,cols)
+        draw(frame)
         time.sleep(SPEED)
 except KeyboardInterrupt:
     pixels.fill((0,0,0))
