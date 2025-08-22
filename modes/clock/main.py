@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 import os
 import json
 import board
@@ -11,17 +10,16 @@ CONFIG_PATH = os.environ.get("LEDMATRIX_CONFIG", "config.json")
 with open(CONFIG_PATH) as f:
     config = json.load(f)
 
-LED_COUNT = 64
 PIN = board.D18
+WIDTH = int(config.get("width", 8))
+HEIGHT = int(config.get("height", 8))
+LED_COUNT = WIDTH * HEIGHT
 BRIGHTNESS = config.get("brightness", 0.2)
 SPEED = config.get("speed", 0.03)
-PALETTE = [
-    (255, 64, 64),
-    (64, 160, 255),
-    (64, 255, 128),
-    (255, 200, 64),
-    (220, 64, 255)
-]
+FLIP_X = bool(config.get("flip_x", False))
+FLIP_Y = bool(config.get("flip_y", False))
+SERPENTINE = bool(config.get("serpentine", True))
+PALETTE = [(255,64,64),(64,160,255),(64,255,128),(255,200,64),(220,64,255)]
 
 pixels = neopixel.NeoPixel(PIN, LED_COUNT, brightness=BRIGHTNESS, auto_write=False)
 
@@ -42,19 +40,19 @@ font = {
     ":":[0x00,0x04,0x00,0x00,0x00,0x04,0x00,0x00]
 }
 
-def idx(x,y):
-    if y % 2 == 0:
-        return y*8 + x
-    else:
-        return y*8 + (7-x)
+def map_xy(x,y):
+    if FLIP_X: x = WIDTH-1-x
+    if FLIP_Y: y = HEIGHT-1-y
+    if SERPENTINE and y%2: x = WIDTH-1-x
+    return y*WIDTH + x
 
 def clear():
     pixels.fill((0,0,0))
 
 def draw_column(x, col_bits, color):
-    for y in range(8):
-        bit = (col_bits >> (7-y)) & 1
-        pixels[idx(x,y)] = color if bit else (0,0,0)
+    for y in range(GLYPH_H):
+        bit = (col_bits >> (GLYPH_H-1-y)) & 1
+        pixels[map_xy(x,y)] = color if bit else (0,0,0)
 
 def build_text_columns(text, spacing=1):
     cols = []
@@ -64,7 +62,7 @@ def build_text_columns(text, spacing=1):
             col = 0
             for r in range(GLYPH_H):
                 if (glyph[r] >> (GLYPH_W-1-cx)) & 1:
-                    col |= (1 << (7-r))
+                    col |= (1 << (GLYPH_H-1-r))
             cols.append((col,i))
         for _ in range(spacing):
             cols.append((0,i))
@@ -91,7 +89,7 @@ try:
             columns = build_text_columns(msg, spacing=1)
             offset = 0 if offset >= len(columns) else offset
         clear()
-        for sx in range(8):
+        for sx in range(WIDTH):
             src = (offset + sx) % len(columns)
             col_bits, char_idx = columns[src]
             draw_column(sx, col_bits, color_for_index(char_idx))
