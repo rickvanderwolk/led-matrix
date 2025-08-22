@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import os,json,time,board,neopixel,random
+import os,json,time,board,neopixel,random,colorsys
 from datetime import datetime
 
 CONFIG_PATH=os.environ.get("LEDMATRIX_CONFIG","config.json")
@@ -38,22 +38,6 @@ glyph={
     9:[0xF,0x9,0xF,0x1]
 }
 
-TETRIS_COLORS={
-    'I':(64,200,255),
-    'O':(255,210,64),
-    'T':(200,80,255),
-    'L':(255,160,64),
-    'J':(64,120,255),
-    'S':(64,255,128),
-    'Z':(255,64,80)
-}
-
-def shade(c,side):
-    r,g,b=c
-    if side=="left": f=0.78
-    else: f=1.0
-    return (min(255,int(r*f)),min(255,int(g*f)),min(255,int(b*f)))
-
 tetromino_defs={
     'I':[[(0,0),(0,1),(0,2),(0,3)],[(0,0),(1,0),(2,0),(3,0)]],
     'O':[[(0,0),(1,0),(0,1),(1,1)]],
@@ -63,6 +47,18 @@ tetromino_defs={
     'S':[[(1,0),(2,0),(0,1),(1,1)],[(0,0),(0,1),(1,1),(1,2)]],
     'Z':[[(0,0),(1,0),(1,1),(2,1)],[(1,0),(0,1),(1,1),(0,2)]],
 }
+
+def hsv_deg(h,s,v):
+    r,g,b=colorsys.hsv_to_rgb((h%360)/360.0,max(0,min(1,s)),max(0,min(1,v)))
+    return (int(r*255),int(g*255),int(b*255))
+
+base_hues={'I':180,'O':60,'T':300,'L':30,'J':220,'S':140,'Z':0}
+
+def neon_palette(side,shift):
+    v=1.0 if side=="right" else 0.9
+    s=1.0
+    jitter=lambda: random.uniform(-5,5)
+    return {k:hsv_deg(base_hues[k]+shift+jitter(),s,v) for k in base_hues}
 
 def translate(shape,dx,dy):
     return [(x+dx,y+dy) for (x,y) in shape]
@@ -142,6 +138,9 @@ class HalfPlayfield:
         self.x0=x0; self.y0=y0; self.x1=x1; self.y1=y1; self.side=side
         self.pieces=[]; self.active=[]; self.colors=[]
         self.done_flag=True
+        self.palette=neon_palette(side,random.uniform(0,360))
+    def set_palette(self,pal):
+        self.palette=pal
     def build_from_digits(self,d_top,d_bot):
         target=digit_cells(d_top,self.x0,self.y0) | digit_cells(d_bot,self.x0,self.y0+4)
         target=thicken_to_multiple_of_4(target,self.x0,self.y0,self.x1,self.y1)
@@ -152,7 +151,7 @@ class HalfPlayfield:
                 block=tuple(fill[:4]); fill=fill[4:]
                 tiling.append((block,'O'))
         self.pieces=[(list(shape),name) for (shape,name) in tiling]
-        self.colors=[shade(TETRIS_COLORS.get(name,(200,200,200)),self.side) for (_,name) in tiling]
+        self.colors=[self.palette.get(name,(255,255,255)) for (_,name) in tiling]
         self.active=[]
         for i,(shape,name) in enumerate(self.pieces):
             spawn=[(x, self.y0-2-random.randint(0,2)) for (x,_) in shape]
@@ -198,6 +197,10 @@ try:
     left=HalfPlayfield(0,0,4,8,"left")
     right=HalfPlayfield(4,0,8,8,"right")
     ph1=ph2=pm1=pm2=None
+    left_shift=random.uniform(0,360)
+    right_shift=(left_shift+150+random.uniform(-20,20))%360
+    left.set_palette(neon_palette("left",left_shift))
+    right.set_palette(neon_palette("right",right_shift))
     while True:
         h1,h2,m1,m2=now_digits()
         if ph1 is None:
@@ -206,9 +209,13 @@ try:
             ph1,ph2,pm1,pm2=h1,h2,m1,m2
         else:
             if (h1,h2)!=(ph1,ph2) and left.done():
+                left_shift=(left_shift+random.uniform(25,60))%360
+                left.set_palette(neon_palette("left",left_shift))
                 left.build_from_digits(h1,h2)
                 ph1,ph2=h1,h2
             if (m1,m2)!=(pm1,pm2) and right.done():
+                right_shift=(left_shift+random.uniform(140,220))%360
+                right.set_palette(neon_palette("right",right_shift))
                 right.build_from_digits(m1,m2)
                 pm1,pm2=m1,m2
         left.step(); right.step()
