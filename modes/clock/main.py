@@ -14,7 +14,7 @@ BRIGHTNESS=config.get("brightness",0.25)
 SPEED=config.get("speed",0.05)
 FLIP_X=bool(config.get("flip_x",False))
 FLIP_Y=bool(config.get("flip_y",False))
-SERPENTINE=bool(config.get("serpentine",True))
+SERPENTINE=bool(config.get("serpentine",False))
 BG=(0,0,0)
 
 pixels=neopixel.NeoPixel(PIN,LED_COUNT,brightness=BRIGHTNESS,auto_write=False)
