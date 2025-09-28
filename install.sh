@@ -50,7 +50,7 @@ EOF
   echo "config.json updated with missing non-placeholder keys from config.example.json"
 fi
 
-echo "Creating systemd service file..."
+echo "Creating systemd service file for LED matrix..."
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 sudo tee "$SERVICE_FILE" > /dev/null <<EOF
 [Unit]
@@ -67,10 +67,42 @@ Environment=PYTHONUNBUFFERED=1
 WantedBy=multi-user.target
 EOF
 
-echo "Reloading systemd and enabling service..."
+echo "Reloading systemd and enabling LED matrix service..."
 sudo systemctl daemon-reexec
 sudo systemctl daemon-reload
 sudo systemctl enable "$SERVICE_NAME"
 sudo systemctl restart "$SERVICE_NAME"
 
-echo "✅ Done! The LED matrix is now running and will auto-start on reboot."
+echo "Setting up Wi-Fi powersave off service (improve SSH responsiveness)..."
+WIFI_SERVICE="/etc/systemd/system/wifi-powersave-off.service"
+sudo tee "$WIFI_SERVICE" > /dev/null <<EOF
+[Unit]
+Description=Disable Wi-Fi power save
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/sbin/iw dev wlan0 set power_save off
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now wifi-powersave-off.service
+
+echo "Adjusting sshd priority  (improve SSH responsiveness)..."
+SSH_OVERRIDE_DIR="/etc/systemd/system/ssh.service.d"
+sudo mkdir -p "$SSH_OVERRIDE_DIR"
+sudo tee "$SSH_OVERRIDE_DIR/override.conf" > /dev/null <<EOF
+[Service]
+Nice=-5
+IOSchedulingClass=best-effort
+IOSchedulingPriority=2
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl restart ssh
+
+echo "✅ Done! The LED matrix is running, Wi-Fi powersave is disabled, and SSH runs with higher priority."
