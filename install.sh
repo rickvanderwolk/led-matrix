@@ -92,7 +92,7 @@ EOF
 sudo systemctl daemon-reload
 sudo systemctl enable --now wifi-powersave-off.service
 
-echo "Adjusting sshd priority  (improve SSH responsiveness)..."
+echo "Adjusting sshd priority (improve SSH responsiveness)..."
 SSH_OVERRIDE_DIR="/etc/systemd/system/ssh.service.d"
 sudo mkdir -p "$SSH_OVERRIDE_DIR"
 sudo tee "$SSH_OVERRIDE_DIR/override.conf" > /dev/null <<EOF
@@ -105,4 +105,4 @@ EOF
 sudo systemctl daemon-reload
 sudo systemctl restart ssh
 
-echo "✅ Done! The LED matrix is running, Wi-Fi powersave is disabled, and SSH runs with higher priority."
+echo "✅ Done! The LED matrix is now running and will auto-start on reboot."
