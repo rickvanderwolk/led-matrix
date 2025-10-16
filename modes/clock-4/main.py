@@ -77,18 +77,20 @@ def xy_to_led_index(x, y):
 
 def map_to_12(value, max_value):
     """
-    Map a value (0 to max_value) to 12 positions (0-11).
+    Map a value (0 to max_value) to 12 positions (0.0-12.0).
+    Returns floating point for smooth animations.
     """
-    return int((value / max_value) * 12)
+    return (value / max_value) * 12
 
 def get_pomodoro_progress():
     """
-    Get Pomodoro timer progress (0-12 positions on ring).
+    Get Pomodoro timer progress (0.0-12.0 positions on ring).
     Timer starts at fixed times: :00 and :30 of each hour
     Returns (position, is_work) where is_work indicates work session (True) or break (False).
     """
     now = datetime.now()
     minute = now.minute
+    second = now.second
 
     # Determine which 30-minute block we're in
     # 0-29 minutes: first block (work :00-:25, break :25-:30)
@@ -105,19 +107,19 @@ def get_pomodoro_progress():
     if minutes_in_block < POMODORO_WORK_MINUTES:
         # Work session (0-24 minutes)
         is_work = True
-        elapsed_minutes = minutes_in_block
-        session_duration = POMODORO_WORK_MINUTES
+        elapsed_seconds = minutes_in_block * 60 + second
+        session_duration = POMODORO_WORK_MINUTES * 60
     else:
         # Break session (25-29 minutes)
         is_work = False
-        elapsed_minutes = minutes_in_block - POMODORO_WORK_MINUTES
-        session_duration = POMODORO_BREAK_MINUTES
+        elapsed_seconds = (minutes_in_block - POMODORO_WORK_MINUTES) * 60 + second
+        session_duration = POMODORO_BREAK_MINUTES * 60
 
-    # Map progress to 12 positions
-    progress = elapsed_minutes / session_duration
-    position = int(progress * 12)
-    if position > 11:
-        position = 11
+    # Map progress to 12 positions (floating point for smooth animation)
+    progress = elapsed_seconds / session_duration
+    position = progress * 12
+    if position > 12:
+        position = 12
 
     return position, is_work
 
@@ -151,26 +153,35 @@ def render_clock():
     second_ring = get_outer_ring_positions(2)   # Bottom-left
     pomodoro_ring = get_outer_ring_positions(3) # Bottom-right
 
+    # Helper function to fill ring with smooth progress
+    def fill_ring_smooth(ring, progress, color):
+        """Fill a ring with smooth progress (0.0-12.0)"""
+        full_leds = int(progress)  # Number of fully lit LEDs
+        fraction = progress - full_leds  # Fractional part for partial LED
+
+        # Fill all fully lit LEDs
+        for i in range(min(full_leds, 12)):
+            led_idx = ring[i]
+            pixels[led_idx] = color
+
+        # Fill partial LED with dimmed brightness
+        if full_leds < 12 and fraction > 0:
+            led_idx = ring[full_leds]
+            dimmed_color = tuple(int(c * fraction) for c in color)
+            pixels[led_idx] = dimmed_color
+
     # Fill hours (red)
-    for i in range(hour_pos + 1):
-        led_idx = hour_ring[i]
-        pixels[led_idx] = (255, 0, 0)
+    fill_ring_smooth(hour_ring, hour_pos, (255, 0, 0))
 
     # Fill minutes (green)
-    for i in range(minute_pos + 1):
-        led_idx = minute_ring[i]
-        pixels[led_idx] = (0, 255, 0)
+    fill_ring_smooth(minute_ring, minute_pos, (0, 255, 0))
 
     # Fill seconds (blue)
-    for i in range(second_pos + 1):
-        led_idx = second_ring[i]
-        pixels[led_idx] = (0, 0, 255)
+    fill_ring_smooth(second_ring, second_pos, (0, 0, 255))
 
     # Fill Pomodoro timer (yellow for work, purple for break)
     pomodoro_color = (255, 255, 0) if is_work_session else (128, 0, 255)
-    for i in range(pomodoro_pos + 1):
-        led_idx = pomodoro_ring[i]
-        pixels[led_idx] = pomodoro_color
+    fill_ring_smooth(pomodoro_ring, pomodoro_pos, pomodoro_color)
 
     pixels.show()
 
