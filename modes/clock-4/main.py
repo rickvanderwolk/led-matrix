@@ -153,7 +153,7 @@ def render_clock():
     second_ring = get_outer_ring_positions(2)   # Bottom-left
     pomodoro_ring = get_outer_ring_positions(3) # Bottom-right
 
-    # Helper function to fill ring with smooth progress
+    # Helper function to fill ring with smooth progress (for fast-changing values)
     def fill_ring_smooth(ring, progress, color):
         """Fill a ring with smooth progress (0.0-12.0)"""
         full_leds = int(progress)  # Number of fully lit LEDs
@@ -170,16 +170,26 @@ def render_clock():
             dimmed_color = tuple(int(c * fraction) for c in color)
             pixels[led_idx] = dimmed_color
 
-    # Fill hours (red)
-    fill_ring_smooth(hour_ring, hour_pos, (255, 0, 0))
+    # Helper function to fill ring with discrete LEDs (for slow-changing values)
+    def fill_ring_discrete(ring, progress, color):
+        """Fill a ring with discrete LEDs (0.0-12.0)"""
+        full_leds = int(progress) + 1  # Number of fully lit LEDs (round up)
 
-    # Fill minutes (green)
-    fill_ring_smooth(minute_ring, minute_pos, (0, 255, 0))
+        # Fill all fully lit LEDs
+        for i in range(min(full_leds, 12)):
+            led_idx = ring[i]
+            pixels[led_idx] = color
 
-    # Fill seconds (blue)
+    # Fill hours (red) - discrete
+    fill_ring_discrete(hour_ring, hour_pos, (255, 0, 0))
+
+    # Fill minutes (green) - discrete
+    fill_ring_discrete(minute_ring, minute_pos, (0, 255, 0))
+
+    # Fill seconds (blue) - smooth
     fill_ring_smooth(second_ring, second_pos, (0, 0, 255))
 
-    # Fill Pomodoro timer (yellow for work, purple for break)
+    # Fill Pomodoro timer (yellow for work, purple for break) - smooth
     pomodoro_color = (255, 255, 0) if is_work_session else (128, 0, 255)
     fill_ring_smooth(pomodoro_ring, pomodoro_pos, pomodoro_color)
 
