@@ -180,18 +180,20 @@ def render_clock():
             led_idx = ring[i]
             pixels[led_idx] = color
 
-    # Fill hours (red) - discrete
-    fill_ring_discrete(hour_ring, hour_pos, (255, 0, 0))
+    # Use one color for all quadrants: white for work, purple for break
+    base_color = (255, 255, 255) if is_work_session else (128, 0, 255)
 
-    # Fill minutes (green) - discrete
-    fill_ring_discrete(minute_ring, minute_pos, (0, 255, 0))
+    # Fill hours - discrete
+    fill_ring_discrete(hour_ring, hour_pos, base_color)
 
-    # Fill seconds (blue) - smooth
-    fill_ring_smooth(second_ring, second_pos, (0, 0, 255))
+    # Fill minutes - discrete
+    fill_ring_discrete(minute_ring, minute_pos, base_color)
 
-    # Fill Pomodoro timer (yellow for work, purple for break) - smooth
-    pomodoro_color = (255, 255, 0) if is_work_session else (128, 0, 255)
-    fill_ring_smooth(pomodoro_ring, pomodoro_pos, pomodoro_color)
+    # Fill seconds - smooth
+    fill_ring_smooth(second_ring, second_pos, base_color)
+
+    # Fill Pomodoro timer - smooth
+    fill_ring_smooth(pomodoro_ring, pomodoro_pos, base_color)
 
     pixels.show()
 
