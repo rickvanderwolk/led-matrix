@@ -179,12 +179,13 @@ def render_clock():
     # Helper function to fill ring with smooth progress and trailing effect
     def fill_ring_smooth(ring, progress, color, trail_length=5):
         """Fill a ring with smooth progress (0.0-12.0) and trailing effect"""
-        # The current position in the ring
-        current_pos = min(progress, 12.0)
+        # The current position in the ring (always show at least 1 LED)
+        current_pos = max(min(progress, 12.0), 0.01)
 
         # Iterate through all positions that should be lit
         for i in range(12):
-            if i >= current_pos:
+            # Calculate position including fractional part
+            if i > current_pos:
                 # Haven't reached this LED yet
                 continue
 
