@@ -240,16 +240,10 @@ def render_clock():
     # Use one color for all quadrants: white for work, purple for break
     base_color = (255, 255, 255) if is_work_session else (128, 0, 255)
 
-    # Fill hours - discrete
-    fill_ring_discrete(hour_ring, hour_pos, base_color)
-
-    # Fill minutes - discrete
-    fill_ring_discrete(minute_ring, minute_pos, base_color)
-
-    # Fill seconds - smooth
+    # Fill all quadrants with smooth animation and trailing effect
+    fill_ring_smooth(hour_ring, hour_pos, base_color)
+    fill_ring_smooth(minute_ring, minute_pos, base_color)
     fill_ring_smooth(second_ring, second_pos, base_color)
-
-    # Fill Pomodoro timer - smooth
     fill_ring_smooth(pomodoro_ring, pomodoro_pos, base_color)
 
     pixels.show()
