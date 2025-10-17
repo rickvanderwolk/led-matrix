@@ -46,6 +46,7 @@ You're all set, the LED matrix will start automatically.
 - [led-sort](https://github.com/rickvanderwolk/led-matrix/tree/main/modes/led-sort)
 - [ntfy-sh](https://github.com/rickvanderwolk/led-matrix/tree/main/modes/ntfy-sh)
 - [pixels-fighting](https://github.com/rickvanderwolk/led-matrix/tree/main/modes/pixels-fighting)
+- [quadrant-clock-with-pomodoro-timer](https://github.com/rickvanderwolk/led-matrix/tree/main/modes/quadrant-clock-with-pomodoro-timer)
 
 <a id="#change-mode"></a>
 ## Change mode
