@@ -176,32 +176,66 @@ def render_clock():
     second_ring = get_outer_ring_positions(2)   # Bottom-left
     pomodoro_ring = get_outer_ring_positions(3) # Bottom-right
 
-    # Helper function to fill ring with smooth progress (for fast-changing values)
-    def fill_ring_smooth(ring, progress, color):
-        """Fill a ring with smooth progress (0.0-12.0)"""
-        full_leds = int(progress)  # Number of fully lit LEDs
-        fraction = progress - full_leds  # Fractional part for partial LED
+    # Helper function to fill ring with smooth progress and trailing effect
+    def fill_ring_smooth(ring, progress, color, trail_length=5):
+        """Fill a ring with smooth progress (0.0-12.0) and trailing effect"""
+        # The current position in the ring
+        current_pos = min(progress, 12.0)
 
-        # Fill all fully lit LEDs
-        for i in range(min(full_leds, 12)):
+        # Iterate through all positions that should be lit
+        for i in range(12):
+            if i >= current_pos:
+                # Haven't reached this LED yet
+                continue
+
             led_idx = ring[i]
-            pixels[led_idx] = color
 
-        # Fill partial LED with dimmed brightness
-        if full_leds < 12 and fraction > 0:
-            led_idx = ring[full_leds]
-            dimmed_color = tuple(int(c * fraction) for c in color)
-            pixels[led_idx] = dimmed_color
+            # Distance from current position (can be fractional)
+            distance = current_pos - i
 
-    # Helper function to fill ring with discrete LEDs (for slow-changing values)
-    def fill_ring_discrete(ring, progress, color):
-        """Fill a ring with discrete LEDs (0.0-12.0)"""
-        full_leds = int(progress) + 1  # Number of fully lit LEDs (round up)
+            if distance <= trail_length:
+                # Within trail range - calculate brightness
+                if distance < 1.0:
+                    # Current LED (fractional position) - always brightest
+                    brightness = 1.0
+                else:
+                    # Trail LED - exponential falloff
+                    brightness = 1.0 - ((distance - 1.0) / trail_length) ** 2
 
-        # Fill all fully lit LEDs
-        for i in range(min(full_leds, 12)):
+                trailed_color = tuple(int(c * max(brightness, 0.1)) for c in color)
+                pixels[led_idx] = trailed_color
+            else:
+                # Outside trail range - very dim
+                pixels[led_idx] = tuple(int(c * 0.1) for c in color)
+
+    # Helper function to fill ring with discrete LEDs and trailing effect
+    def fill_ring_discrete(ring, progress, color, trail_length=5):
+        """Fill a ring with discrete LEDs (0.0-12.0) and trailing effect"""
+        # The current LED position (round up for discrete)
+        current_led = min(int(progress) + 1, 12)
+
+        # Fill all LEDs with trailing effect
+        for i in range(12):
+            if i >= current_led:
+                # Haven't reached this LED yet
+                continue
+
             led_idx = ring[i]
-            pixels[led_idx] = color
+
+            # Distance from current LED
+            distance = current_led - 1 - i
+
+            if i == current_led - 1:
+                # Current LED - fully bright
+                pixels[led_idx] = color
+            elif distance < trail_length:
+                # Within trail range - exponential falloff
+                brightness = 1.0 - (distance / trail_length) ** 2
+                trailed_color = tuple(int(c * max(brightness, 0.1)) for c in color)
+                pixels[led_idx] = trailed_color
+            else:
+                # Outside trail range - very dim
+                pixels[led_idx] = tuple(int(c * 0.1) for c in color)
 
     # Use one color for all quadrants: white for work, purple for break
     base_color = (255, 255, 255) if is_work_session else (128, 0, 255)
