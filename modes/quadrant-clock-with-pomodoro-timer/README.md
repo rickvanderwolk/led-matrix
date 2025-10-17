@@ -19,14 +19,26 @@ The 8×8 LED matrix is divided into 4 quadrants (4×4 each):
 - **Bottom-left**: Seconds (0-59)
 - **Bottom-right**: Pomodoro timer progress
 
-## Ring Display
+## Column Display
 
-Each quadrant shows a ring of 12 LEDs that fill clockwise (like a clock):
+Each quadrant uses a column-based layout with 12 LEDs arranged in a 4-4-2-2 pattern:
 - Time values are mapped to 12 positions
-- Hours: Discrete LEDs (jumps between positions)
-- Minutes: Discrete LEDs (jumps between positions)
-- Seconds: Smooth transitions (gradual fade)
-- Pomodoro: Smooth transitions (gradual fade)
+- Columns fill from left to right (or right to left for mirrored quadrants)
+- **Empty center**: The middle 4×4 LEDs remain unlit, creating a distinctive layout
+
+**Pattern per quadrant:**
+- Column 1: 4 LEDs
+- Column 2: 4 LEDs
+- Column 3: 2 LEDs
+- Column 4: 2 LEDs
+
+## Trailing Effect
+
+All time indicators feature a smooth trailing animation:
+- **Current position**: Fully bright LED
+- **Trail**: Previous 5 positions gradually dim with exponential falloff (comet tail effect)
+- **Past positions**: Very dim (10% brightness) to show the full progression
+- **Smooth fading**: All quadrants use smooth transitions between positions
 
 ## Pomodoro Timer
 
@@ -47,8 +59,10 @@ All quadrants use the same color simultaneously, creating a unified visual exper
 
 ## Features
 
+- **Column-based layout**: Unique 4-4-2-2 LED pattern per quadrant with empty center
+- **Trailing animations**: Comet tail effect with exponential brightness falloff
+- **Smooth fading**: All time indicators transition smoothly between positions
 - **Synchronized colors**: All quadrants share the same color based on Pomodoro state
-- **Smooth animations**: Seconds and Pomodoro timer use gradual LED transitions
 - **Auto-running timer**: No manual start/stop needed - follows the fixed schedule
 - **12-hour format**: Hours displayed in 12-hour clock format
-- **Ring-based display**: Each time unit shown as a circular progress indicator
+- **Visual depth**: Multiple brightness levels create depth and movement
