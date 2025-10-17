@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+__version__ = "1.0.0"
+
 import json
 import os
 import time
@@ -32,7 +34,7 @@ def main():
             time.sleep(5)
             continue
 
-        print(f"Running mode: {mode}")
+        print(f"Running mode: {mode} (LED Matrix v{__version__})")
 
         env = os.environ.copy()
         env["LEDMATRIX_CONFIG"] = CONFIG_PATH
