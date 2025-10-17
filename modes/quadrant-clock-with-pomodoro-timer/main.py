@@ -34,33 +34,56 @@ POMODORO_BREAK_MINUTES = 5
 
 def get_outer_ring_positions(quadrant):
     """
-    Get the 12 outer ring positions for a quadrant as LED indices.
+    Get the 12 column-based positions for a quadrant as LED indices.
     Quadrant: 0=top-left, 1=top-right, 2=bottom-left, 3=bottom-right
-    Returns list of LED indices in clockwise order like a clock
+    Pattern: 4-4-2-2 LEDs per column, leaving center 4x4 empty
+    Returns list of LED indices filling columns in the specified pattern
     """
-    # Base coordinates for each quadrant (top-left corner)
-    base_x = (quadrant % 2) * 4
-    base_y = (quadrant // 2) * 4
-
-    # Manually define the 12 positions clockwise for each quadrant
-    # We'll convert to LED indices directly
     positions = []
 
-    # Top row (y=0): 4 positions, left to right
-    for x in range(4):
-        positions.append(xy_to_led_index(base_x + x, base_y))
+    if quadrant == 0:
+        # UREN (top-left): columns from left to right, top to bottom
+        # Column 0: 4 LEDs down
+        positions.extend([0, 8, 16, 24])
+        # Column 1: 4 LEDs down
+        positions.extend([1, 9, 17, 25])
+        # Column 2: 2 LEDs down
+        positions.extend([2, 10])
+        # Column 3: 2 LEDs down
+        positions.extend([3, 11])
 
-    # Right column (x=3): 3 positions going down (y=1,2,3)
-    for y in range(1, 4):
-        positions.append(xy_to_led_index(base_x + 3, base_y + y))
+    elif quadrant == 1:
+        # MINUTEN (top-right): columns from right to left (mirrored), top to bottom
+        # Column 3: 4 LEDs down
+        positions.extend([7, 15, 23, 31])
+        # Column 2: 4 LEDs down
+        positions.extend([6, 14, 22, 30])
+        # Column 1: 2 LEDs down
+        positions.extend([5, 13])
+        # Column 0: 2 LEDs down
+        positions.extend([4, 12])
 
-    # Bottom row (y=3): 3 positions going left (x=2,1,0)
-    for x in range(2, -1, -1):
-        positions.append(xy_to_led_index(base_x + x, base_y + 3))
+    elif quadrant == 2:
+        # SECONDEN (bottom-left): columns from left to right, bottom to top
+        # Column 0: 4 LEDs up
+        positions.extend([56, 48, 40, 32])
+        # Column 1: 4 LEDs up
+        positions.extend([57, 49, 41, 33])
+        # Column 2: 2 LEDs up
+        positions.extend([58, 50])
+        # Column 3: 2 LEDs up
+        positions.extend([59, 51])
 
-    # Left column (x=0): 2 positions going up (y=2,1)
-    for y in range(2, 0, -1):
-        positions.append(xy_to_led_index(base_x, base_y + y))
+    elif quadrant == 3:
+        # POMODORO (bottom-right): columns from right to left (mirrored), bottom to top
+        # Column 3: 4 LEDs up
+        positions.extend([63, 55, 47, 39])
+        # Column 2: 4 LEDs up
+        positions.extend([62, 54, 46, 38])
+        # Column 1: 2 LEDs up
+        positions.extend([61, 53])
+        # Column 0: 2 LEDs up
+        positions.extend([60, 52])
 
     return positions
 
@@ -153,46 +176,75 @@ def render_clock():
     second_ring = get_outer_ring_positions(2)   # Bottom-left
     pomodoro_ring = get_outer_ring_positions(3) # Bottom-right
 
-    # Helper function to fill ring with smooth progress (for fast-changing values)
-    def fill_ring_smooth(ring, progress, color):
-        """Fill a ring with smooth progress (0.0-12.0)"""
-        full_leds = int(progress)  # Number of fully lit LEDs
-        fraction = progress - full_leds  # Fractional part for partial LED
+    # Helper function to fill ring with smooth progress and trailing effect
+    def fill_ring_smooth(ring, progress, color, trail_length=5):
+        """Fill a ring with smooth progress (0.0-12.0) and trailing effect"""
+        # The current position in the ring (always show at least 1 LED)
+        current_pos = max(min(progress, 12.0), 0.01)
 
-        # Fill all fully lit LEDs
-        for i in range(min(full_leds, 12)):
+        # Iterate through all positions that should be lit
+        for i in range(12):
+            # Calculate position including fractional part
+            if i > current_pos:
+                # Haven't reached this LED yet
+                continue
+
             led_idx = ring[i]
-            pixels[led_idx] = color
 
-        # Fill partial LED with dimmed brightness
-        if full_leds < 12 and fraction > 0:
-            led_idx = ring[full_leds]
-            dimmed_color = tuple(int(c * fraction) for c in color)
-            pixels[led_idx] = dimmed_color
+            # Distance from current position (can be fractional)
+            distance = current_pos - i
 
-    # Helper function to fill ring with discrete LEDs (for slow-changing values)
-    def fill_ring_discrete(ring, progress, color):
-        """Fill a ring with discrete LEDs (0.0-12.0)"""
-        full_leds = int(progress) + 1  # Number of fully lit LEDs (round up)
+            if distance <= trail_length:
+                # Within trail range - calculate brightness
+                if distance < 1.0:
+                    # Current LED (fractional position) - always brightest
+                    brightness = 1.0
+                else:
+                    # Trail LED - exponential falloff
+                    brightness = 1.0 - ((distance - 1.0) / trail_length) ** 2
 
-        # Fill all fully lit LEDs
-        for i in range(min(full_leds, 12)):
+                trailed_color = tuple(int(c * max(brightness, 0.1)) for c in color)
+                pixels[led_idx] = trailed_color
+            else:
+                # Outside trail range - very dim
+                pixels[led_idx] = tuple(int(c * 0.1) for c in color)
+
+    # Helper function to fill ring with discrete LEDs and trailing effect
+    def fill_ring_discrete(ring, progress, color, trail_length=5):
+        """Fill a ring with discrete LEDs (0.0-12.0) and trailing effect"""
+        # The current LED position (round up for discrete)
+        current_led = min(int(progress) + 1, 12)
+
+        # Fill all LEDs with trailing effect
+        for i in range(12):
+            if i >= current_led:
+                # Haven't reached this LED yet
+                continue
+
             led_idx = ring[i]
-            pixels[led_idx] = color
+
+            # Distance from current LED
+            distance = current_led - 1 - i
+
+            if i == current_led - 1:
+                # Current LED - fully bright
+                pixels[led_idx] = color
+            elif distance < trail_length:
+                # Within trail range - exponential falloff
+                brightness = 1.0 - (distance / trail_length) ** 2
+                trailed_color = tuple(int(c * max(brightness, 0.1)) for c in color)
+                pixels[led_idx] = trailed_color
+            else:
+                # Outside trail range - very dim
+                pixels[led_idx] = tuple(int(c * 0.1) for c in color)
 
     # Use one color for all quadrants: white for work, purple for break
     base_color = (255, 255, 255) if is_work_session else (128, 0, 255)
 
-    # Fill hours - discrete
-    fill_ring_discrete(hour_ring, hour_pos, base_color)
-
-    # Fill minutes - discrete
-    fill_ring_discrete(minute_ring, minute_pos, base_color)
-
-    # Fill seconds - smooth
+    # Fill all quadrants with smooth animation and trailing effect
+    fill_ring_smooth(hour_ring, hour_pos, base_color)
+    fill_ring_smooth(minute_ring, minute_pos, base_color)
     fill_ring_smooth(second_ring, second_pos, base_color)
-
-    # Fill Pomodoro timer - smooth
     fill_ring_smooth(pomodoro_ring, pomodoro_pos, base_color)
 
     pixels.show()

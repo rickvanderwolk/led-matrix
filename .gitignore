@@ -1,3 +1,10 @@
 .idea
 .DS_store
 config.json
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Visualizer virtual environment
+visualizer/venv/
