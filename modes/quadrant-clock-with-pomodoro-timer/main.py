@@ -34,33 +34,56 @@ POMODORO_BREAK_MINUTES = 5
 
 def get_outer_ring_positions(quadrant):
     """
-    Get the 12 outer ring positions for a quadrant as LED indices.
+    Get the 12 column-based positions for a quadrant as LED indices.
     Quadrant: 0=top-left, 1=top-right, 2=bottom-left, 3=bottom-right
-    Returns list of LED indices in clockwise order like a clock
+    Pattern: 4-4-2-2 LEDs per column, leaving center 4x4 empty
+    Returns list of LED indices filling columns in the specified pattern
     """
-    # Base coordinates for each quadrant (top-left corner)
-    base_x = (quadrant % 2) * 4
-    base_y = (quadrant // 2) * 4
-
-    # Manually define the 12 positions clockwise for each quadrant
-    # We'll convert to LED indices directly
     positions = []
 
-    # Top row (y=0): 4 positions, left to right
-    for x in range(4):
-        positions.append(xy_to_led_index(base_x + x, base_y))
+    if quadrant == 0:
+        # UREN (top-left): columns from left to right, top to bottom
+        # Column 0: 4 LEDs down
+        positions.extend([0, 8, 16, 24])
+        # Column 1: 4 LEDs down
+        positions.extend([1, 9, 17, 25])
+        # Column 2: 2 LEDs down
+        positions.extend([2, 10])
+        # Column 3: 2 LEDs down
+        positions.extend([3, 11])
 
-    # Right column (x=3): 3 positions going down (y=1,2,3)
-    for y in range(1, 4):
-        positions.append(xy_to_led_index(base_x + 3, base_y + y))
+    elif quadrant == 1:
+        # MINUTEN (top-right): columns from right to left (mirrored), top to bottom
+        # Column 3: 4 LEDs down
+        positions.extend([7, 15, 23, 31])
+        # Column 2: 4 LEDs down
+        positions.extend([6, 14, 22, 30])
+        # Column 1: 2 LEDs down
+        positions.extend([5, 13])
+        # Column 0: 2 LEDs down
+        positions.extend([4, 12])
 
-    # Bottom row (y=3): 3 positions going left (x=2,1,0)
-    for x in range(2, -1, -1):
-        positions.append(xy_to_led_index(base_x + x, base_y + 3))
+    elif quadrant == 2:
+        # SECONDEN (bottom-left): columns from left to right, bottom to top
+        # Column 0: 4 LEDs up
+        positions.extend([56, 48, 40, 32])
+        # Column 1: 4 LEDs up
+        positions.extend([57, 49, 41, 33])
+        # Column 2: 2 LEDs up
+        positions.extend([58, 50])
+        # Column 3: 2 LEDs up
+        positions.extend([59, 51])
 
-    # Left column (x=0): 2 positions going up (y=2,1)
-    for y in range(2, 0, -1):
-        positions.append(xy_to_led_index(base_x, base_y + y))
+    elif quadrant == 3:
+        # POMODORO (bottom-right): columns from right to left (mirrored), bottom to top
+        # Column 3: 4 LEDs up
+        positions.extend([63, 55, 47, 39])
+        # Column 2: 4 LEDs up
+        positions.extend([62, 54, 46, 38])
+        # Column 1: 2 LEDs up
+        positions.extend([61, 53])
+        # Column 0: 2 LEDs up
+        positions.extend([60, 52])
 
     return positions
 
