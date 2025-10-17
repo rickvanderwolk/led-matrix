@@ -1,3 +1,7 @@
 .idea
 .DS_store
 config.json
+
+# Visualizer virtual environment
+visualizer/venv/
+visualizer/__pycache__/
