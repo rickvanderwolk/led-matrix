@@ -55,7 +55,7 @@ BRIGHTNESS = config.get("brightness", 0.2)
 
 # Initialize LED strip at module level (required for visualizer)
 pixels = neopixel.NeoPixel(
-    PIN, LED_COUNT, brightness=BRIGHTNESS, auto_write=False, pixel_order=neopixel.GRB
+    PIN, LED_COUNT, brightness=BRIGHTNESS, auto_write=False
 )
 
 # Colors (R, G, B)
