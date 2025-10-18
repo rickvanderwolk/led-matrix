@@ -16,6 +16,11 @@ VISUALIZER_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, BASE_DIR)
 sys.path.insert(0, VISUALIZER_DIR)
 
+# Mode name redirects for backward compatibility
+MODE_REDIRECTS = {
+    "quadrant-clock-with-pomodoro-timer": "clock",
+}
+
 # Import mock hardware BEFORE any mode scripts can import real hardware
 import mock_hardware
 
@@ -187,6 +192,12 @@ def main():
             mode = choice
     else:
         mode = args.mode
+
+    # Handle mode name redirects for backward compatibility
+    if mode in MODE_REDIRECTS:
+        old_mode = mode
+        mode = MODE_REDIRECTS[mode]
+        print(f"Note: Mode '{old_mode}' has been renamed to '{mode}'")
 
     # Determine mode path
     if os.path.exists(mode):

@@ -11,6 +11,11 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
 MODES_DIR = os.path.join(BASE_DIR, "modes")
 
+# Mode name redirects for backward compatibility
+MODE_REDIRECTS = {
+    "quadrant-clock-with-pomodoro-timer": "clock",
+}
+
 def load_config():
     if os.path.exists(CONFIG_PATH):
         with open(CONFIG_PATH) as f:
@@ -26,6 +31,12 @@ def main():
             print("No mode selected. Waiting...")
             time.sleep(5)
             continue
+
+        # Handle mode name redirects for backward compatibility
+        if mode in MODE_REDIRECTS:
+            old_mode = mode
+            mode = MODE_REDIRECTS[mode]
+            print(f"Mode '{old_mode}' has been renamed to '{mode}', redirecting...")
 
         script_path = os.path.join(MODES_DIR, mode, "main.py")
 

@@ -42,12 +42,12 @@ You're all set, the LED matrix will start automatically.
 <a id="#modes"></a>
 ## Modes
 
-- [evolving-square](https://github.com/rickvanderwolk/led-matrix/tree/main/modes/evolving-square)
-- [led-sort](https://github.com/rickvanderwolk/led-matrix/tree/main/modes/led-sort)
-- [ntfy-sh](https://github.com/rickvanderwolk/led-matrix/tree/main/modes/ntfy-sh)
-- [pathfinder](https://github.com/rickvanderwolk/led-matrix/tree/main/modes/pathfinder)
-- [pixels-fighting](https://github.com/rickvanderwolk/led-matrix/tree/main/modes/pixels-fighting)
-- [quadrant-clock-with-pomodoro-timer](https://github.com/rickvanderwolk/led-matrix/tree/main/modes/quadrant-clock-with-pomodoro-timer)
+- [clock](https://github.com/rickvanderwolk/led-matrix/tree/main/modes/clock) - 4-quadrant clock with Pomodoro timer
+- [evolving-square](https://github.com/rickvanderwolk/led-matrix/tree/main/modes/evolving-square) - Randomly evolving colored pixels
+- [led-sort](https://github.com/rickvanderwolk/led-matrix/tree/main/modes/led-sort) - Visualize sorting algorithms
+- [ntfy-sh](https://github.com/rickvanderwolk/led-matrix/tree/main/modes/ntfy-sh) - Remote control via ntfy.sh
+- [pathfinder](https://github.com/rickvanderwolk/led-matrix/tree/main/modes/pathfinder) - Pathfinding algorithm visualization
+- [pixels-fighting](https://github.com/rickvanderwolk/led-matrix/tree/main/modes/pixels-fighting) - Color battle simulation
 
 <a id="#change-mode"></a>
 ## Change mode

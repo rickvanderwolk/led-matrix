@@ -1,6 +1,8 @@
-# Quadrant Clock with Pomodoro Timer
+# Clock
 
 A 4-quadrant LED matrix clock that displays hours, minutes, seconds, and an integrated Pomodoro productivity timer.
+
+> **Note**: This mode was previously named `quadrant-clock-with-pomodoro-timer`. The old name still works for backward compatibility.
 
 ## Display Layout
 
