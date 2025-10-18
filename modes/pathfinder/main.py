@@ -58,14 +58,14 @@ pixels = neopixel.NeoPixel(
     PIN, LED_COUNT, brightness=BRIGHTNESS, auto_write=False
 )
 
-# Colors (R, G, B)
-COLOR_START = (0, 255, 0)  # Green
-COLOR_GOAL = (255, 0, 0)  # Red
-COLOR_OBSTACLE = (150, 0, 150)  # Purple (walls)
-COLOR_EMPTY = (5, 5, 5)  # Very dim white (walkable area)
-COLOR_FRONTIER = (255, 200, 0)  # Yellow
-COLOR_EXPLORED = (0, 100, 255)  # Blue
-COLOR_PATH = (255, 255, 255)  # White
+# Colors (R, G, B) - Modern, elegant palette
+COLOR_START = (0, 200, 100)  # Teal/cyan (fresh, distinct)
+COLOR_GOAL = (255, 80, 80)  # Soft red (clear but not harsh)
+COLOR_OBSTACLE = (60, 60, 60)  # Dark gray (subtle walls)
+COLOR_EMPTY = (0, 0, 0)  # Pure black (clean background)
+COLOR_FRONTIER = (200, 150, 0)  # Warm amber (exploration edge)
+COLOR_EXPLORED = (40, 40, 120)  # Deep blue (visited areas)
+COLOR_PATH = (255, 255, 255)  # Pure white (final path stands out)
 
 # Timing
 STEP_DELAY = 0.05  # Seconds between visualization steps
