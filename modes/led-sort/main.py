@@ -111,22 +111,26 @@ def merge(values, start, mid, end):
     while i < len(left) and j < len(right):
         if left[i] <= right[j]:
             values[k] = left[i]
+            source_idx = start + i
             i += 1
         else:
             values[k] = right[j]
+            source_idx = mid + j
             j += 1
-        update_leds(values, [k])
+        update_leds(values, [k, source_idx])
         time.sleep(SLEEP_BETWEEN_CHANGES)
         k += 1
     while i < len(left):
         values[k] = left[i]
-        update_leds(values, [k])
+        source_idx = start + i
+        update_leds(values, [k, source_idx])
         time.sleep(SLEEP_BETWEEN_CHANGES)
         i += 1
         k += 1
     while j < len(right):
         values[k] = right[j]
-        update_leds(values, [k])
+        source_idx = mid + j
+        update_leds(values, [k, source_idx])
         time.sleep(SLEEP_BETWEEN_CHANGES)
         j += 1
         k += 1
@@ -259,6 +263,10 @@ def counting_sort(values, exp):
     n = LED_COUNT
     output = [0] * n
     count = [0] * 10
+
+    # Create a copy to track original positions
+    original_values = values.copy()
+
     for i in range(n):
         index = (values[i] // exp) % 10
         count[index] += 1
@@ -267,13 +275,25 @@ def counting_sort(values, exp):
     i = n - 1
     while i >= 0:
         index = (values[i] // exp) % 10
-        output[count[index] - 1] = values[i]
+        dest_pos = count[index] - 1
+        output[dest_pos] = values[i]
         count[index] -= 1
         i -= 1
+
+    # Copy back and visualize the movement
     for i in range(n):
-        values[i] = output[i]
-        update_leds(values, [i])
-        time.sleep(SLEEP_BETWEEN_CHANGES)
+        if values[i] != output[i]:
+            # Find where this output value came from in the original array
+            source_idx = original_values.index(output[i])
+            values[i] = output[i]
+            update_leds(values, [i, source_idx])
+            time.sleep(SLEEP_BETWEEN_CHANGES)
+            # Mark as used to handle duplicates
+            original_values[source_idx] = -1
+        else:
+            values[i] = output[i]
+            update_leds(values, [i])
+            time.sleep(SLEEP_BETWEEN_CHANGES)
 
 def flash_sort(values):
     n = len(values)
@@ -296,14 +316,17 @@ def flash_sort(values):
             j += 1
             k = int((m - 1) * (values[j] - min_val) / (max_val - min_val))
         flash = values[j]
+        flash_start = j
         while j != l[k]:
             k = int((m - 1) * (flash - min_val) / (max_val - min_val))
-            hold = values[l[k] - 1]
-            values[l[k] - 1] = flash
+            dest_idx = l[k] - 1
+            hold = values[dest_idx]
+            values[dest_idx] = flash
             flash = hold
             l[k] -= 1
-            update_leds(values)
+            update_leds(values, [flash_start, dest_idx])
             time.sleep(SLEEP_BETWEEN_CHANGES)
+            flash_start = dest_idx
             move += 1
     insertion_sort(values)
 
