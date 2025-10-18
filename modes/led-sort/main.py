@@ -263,6 +263,10 @@ def counting_sort(values, exp):
     n = LED_COUNT
     output = [0] * n
     count = [0] * 10
+
+    # Create a copy to track original positions
+    original_values = values.copy()
+
     for i in range(n):
         index = (values[i] // exp) % 10
         count[index] += 1
@@ -271,13 +275,25 @@ def counting_sort(values, exp):
     i = n - 1
     while i >= 0:
         index = (values[i] // exp) % 10
-        output[count[index] - 1] = values[i]
+        dest_pos = count[index] - 1
+        output[dest_pos] = values[i]
         count[index] -= 1
         i -= 1
+
+    # Copy back and visualize the movement
     for i in range(n):
-        values[i] = output[i]
-        update_leds(values, [i])
-        time.sleep(SLEEP_BETWEEN_CHANGES)
+        if values[i] != output[i]:
+            # Find where this output value came from in the original array
+            source_idx = original_values.index(output[i])
+            values[i] = output[i]
+            update_leds(values, [i, source_idx])
+            time.sleep(SLEEP_BETWEEN_CHANGES)
+            # Mark as used to handle duplicates
+            original_values[source_idx] = -1
+        else:
+            values[i] = output[i]
+            update_leds(values, [i])
+            time.sleep(SLEEP_BETWEEN_CHANGES)
 
 def flash_sort(values):
     n = len(values)
