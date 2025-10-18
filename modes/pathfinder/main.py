@@ -160,30 +160,24 @@ def main():
         (AStar, "A*"),
     ]
 
-    algorithm_index = 0
-
     try:
         while True:
-            # Vary obstacle density for more interesting mazes (15-30%)
+            # Generate ONE new maze for all algorithms to compare
             obstacle_density = random.uniform(0.15, 0.30)
-
-            # Generate new maze
             maze = Maze(width=GRID_SIZE, height=GRID_SIZE, obstacle_density=obstacle_density)
             grid, start, goal = maze.generate()
 
-            # Draw initial maze
-            draw_maze(pixels, grid, start, goal)
-            time.sleep(PAUSE_BEFORE_START)
+            # Run ALL algorithms on the SAME maze
+            for algorithm_class, algorithm_name in algorithms:
+                # Draw initial maze
+                draw_maze(pixels, grid, start, goal)
+                time.sleep(PAUSE_BEFORE_START)
 
-            # Use algorithms in sequence
-            algorithm_class, algorithm_name = algorithms[algorithm_index]
-            run_algorithm(pixels, algorithm_class, algorithm_name, maze, start, goal)
+                # Run this algorithm
+                run_algorithm(pixels, algorithm_class, algorithm_name, maze, start, goal)
 
-            # Pause to show result
-            time.sleep(PAUSE_AFTER_PATH)
-
-            # Move to next algorithm
-            algorithm_index = (algorithm_index + 1) % len(algorithms)
+                # Pause to show result
+                time.sleep(PAUSE_AFTER_PATH)
 
     except KeyboardInterrupt:
         print("\nShutting down...")
