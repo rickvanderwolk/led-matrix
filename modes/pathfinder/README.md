@@ -6,11 +6,11 @@ A visual demonstration of classic pathfinding algorithms on an 8x8 LED matrix. W
 
 - **Green**: Start position (typically top-left quadrant)
 - **Red**: Goal position (typically bottom-right quadrant)
-- **Black**: Obstacles/walls (randomly generated)
+- **Purple/Magenta**: Obstacles/walls (randomly generated)
+- **Very dim gray**: Empty walkable cells
 - **Yellow**: Frontier nodes (currently being considered)
 - **Blue**: Explored nodes (already visited)
 - **White**: Final path from start to goal
-- **Dim white**: Empty walkable cells
 
 ## Algorithms
 
@@ -74,20 +74,25 @@ The mode cycles through 4 different pathfinding algorithms:
 
 ## How the Visualization Works
 
-1. **Maze Generation**: Random obstacles (15-30% density) are placed while ensuring a valid path exists
+1. **Maze Generation**: A random maze is created with obstacles (15-30% density) while ensuring a valid path exists
 2. **Start/Goal Placement**: Start spawns in top-left area, goal in bottom-right area
-3. **Algorithm Execution**: Each algorithm runs step-by-step with visual feedback
-4. **Path Reconstruction**: Once the goal is found, the optimal path is highlighted in white
-5. **Algorithm Cycle**: Cycles through BFS → DFS → Dijkstra → A* → repeat
-6. **New Maze**: Each algorithm gets a fresh maze with different obstacles and positions
+3. **Algorithm Comparison**: All 4 algorithms solve the SAME maze in sequence:
+   - BFS runs first and shows its solution
+   - DFS gets the same maze and shows its solution
+   - Dijkstra gets the same maze and shows its solution
+   - A* gets the same maze and shows its solution
+4. **Path Visualization**: Each algorithm runs step-by-step with visual feedback, showing explored nodes (blue), frontier (yellow), and final path (white)
+5. **New Maze**: After all 4 algorithms have completed, a completely new maze is generated and the cycle repeats
 
 ## Performance Comparison
 
-On a typical 8x8 maze, you'll notice:
+Since all algorithms solve the SAME maze, you can directly compare their strategies:
 
-- **BFS & Dijkstra**: Explore many nodes but guaranteed shortest path
-- **DFS**: Unpredictable - sometimes fast, sometimes explores almost everything
-- **A***: Usually explores the fewest nodes thanks to its heuristic guidance
+- **BFS & Dijkstra**: Will find the exact same shortest path, explore similar numbers of nodes in a wave pattern
+- **DFS**: May find a different (often longer) path, exploration pattern is more "snaky" and unpredictable
+- **A***: Finds the same shortest path as BFS/Dijkstra but explores significantly fewer nodes thanks to its goal-directed heuristic
+
+**Watch closely**: On the same maze, you'll see A* "aim" toward the goal while BFS spreads out evenly in all directions!
 
 ## Configuration
 
