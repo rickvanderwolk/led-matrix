@@ -316,14 +316,17 @@ def flash_sort(values):
             j += 1
             k = int((m - 1) * (values[j] - min_val) / (max_val - min_val))
         flash = values[j]
+        flash_start = j
         while j != l[k]:
             k = int((m - 1) * (flash - min_val) / (max_val - min_val))
-            hold = values[l[k] - 1]
-            values[l[k] - 1] = flash
+            dest_idx = l[k] - 1
+            hold = values[dest_idx]
+            values[dest_idx] = flash
             flash = hold
             l[k] -= 1
-            update_leds(values)
+            update_leds(values, [flash_start, dest_idx])
             time.sleep(SLEEP_BETWEEN_CHANGES)
+            flash_start = dest_idx
             move += 1
     insertion_sort(values)
 
