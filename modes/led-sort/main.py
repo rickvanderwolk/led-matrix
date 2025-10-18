@@ -111,22 +111,26 @@ def merge(values, start, mid, end):
     while i < len(left) and j < len(right):
         if left[i] <= right[j]:
             values[k] = left[i]
+            source_idx = start + i
             i += 1
         else:
             values[k] = right[j]
+            source_idx = mid + j
             j += 1
-        update_leds(values, [k])
+        update_leds(values, [k, source_idx])
         time.sleep(SLEEP_BETWEEN_CHANGES)
         k += 1
     while i < len(left):
         values[k] = left[i]
-        update_leds(values, [k])
+        source_idx = start + i
+        update_leds(values, [k, source_idx])
         time.sleep(SLEEP_BETWEEN_CHANGES)
         i += 1
         k += 1
     while j < len(right):
         values[k] = right[j]
-        update_leds(values, [k])
+        source_idx = mid + j
+        update_leds(values, [k, source_idx])
         time.sleep(SLEEP_BETWEEN_CHANGES)
         j += 1
         k += 1
