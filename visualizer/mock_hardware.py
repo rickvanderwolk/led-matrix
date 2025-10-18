@@ -99,6 +99,12 @@ class MockNeoPixel:
 # Create mock modules that scripts can import
 board = MockBoard()
 
+# Mock pixel order constants (actual values don't matter for visualization)
+GRB = "GRB"
+RGB = "RGB"
+RGBW = "RGBW"
+GRBW = "GRBW"
+
 def NeoPixel(*args, **kwargs):
     """Factory function to create MockNeoPixel instances"""
     return MockNeoPixel(*args, **kwargs)
