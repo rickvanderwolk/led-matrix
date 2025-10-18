@@ -14,7 +14,7 @@ python3 -m venv "$INSTALL_DIR/ledmatrix"
 
 echo "Installing Python packages in virtualenv..."
 "$INSTALL_DIR/ledmatrix/bin/pip" install --upgrade pip
-"$INSTALL_DIR/ledmatrix/bin/pip" install rpi_ws281x adafruit-circuitpython-neopixel RPi.GPIO flask websocket-client
+"$INSTALL_DIR/ledmatrix/bin/pip" install rpi_ws281x adafruit-circuitpython-neopixel RPi.GPIO websocket-client
 
 echo "Ensuring config.json exists with required keys (excluding placeholders)..."
 CONFIG_EXAMPLE="$INSTALL_DIR/config.example.json"
