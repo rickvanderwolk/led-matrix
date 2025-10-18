@@ -4,12 +4,12 @@ A visual demonstration of classic pathfinding algorithms on an 8x8 LED matrix. W
 
 ## Visual Legend
 
-- **Green**: Start position (typically top-left quadrant)
-- **Red**: Goal position (typically bottom-right quadrant)
-- **Purple/Magenta**: Obstacles/walls (randomly generated)
-- **Very dim gray**: Empty walkable cells
-- **Yellow**: Frontier nodes (currently being considered)
-- **Blue**: Explored nodes (already visited)
+- **Teal/Cyan**: Start position (typically top-left quadrant)
+- **Soft Red**: Goal position (typically bottom-right quadrant)
+- **Dark Gray**: Obstacles/walls (randomly generated)
+- **Black**: Empty walkable cells (clean background)
+- **Warm Amber**: Frontier nodes (currently being considered)
+- **Deep Blue**: Explored nodes (already visited)
 - **White**: Final path from start to goal
 
 ## Algorithms
