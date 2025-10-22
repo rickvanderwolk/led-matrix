@@ -4,8 +4,8 @@ An infinite visualization of pi's digits streaming across the LED matrix in bina
 
 ## Visual Legend
 
-- **Yellow**: Binary 1
-- **Blue**: Binary 0
+- **Green**: Binary 1 (active)
+- **Off/Black**: Binary 0 (inactive)
 
 ## How It Works
 
