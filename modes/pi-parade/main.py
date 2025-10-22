@@ -234,10 +234,10 @@ def io_thread_func():
         digits_to_load = cache_digits
         io_display_position = 0
 
-    for digit in digits_to_load[:3000]:
+    for digit in digits_to_load[:1500]:  # 10 min buffer at 5 bits/sec
         io_bit_buffer.extend(digit_to_binary_bits(digit))
 
-    print(f"[I/O] Initial buffer: {len(io_bit_buffer)} bits")
+    print(f"[I/O] Initial buffer: {len(io_bit_buffer)} bits (~{len(io_bit_buffer)/5/60:.1f} min)")
 
     last_cache_check = time.time()
     last_position_save = time.time()
@@ -301,6 +301,7 @@ def main():
     print("[Display] Each digit of pi is shown in 4-bit binary, scrolling through the matrix")
 
     bit_counter = 0  # Count bits to track digit progression
+    log_counter = 0  # Count frames for periodic logging (every 30 sec)
 
     try:
         while True:
@@ -332,6 +333,13 @@ def main():
                 io_display_position += 1
                 io_position_dirty = True  # Mark for saving by I/O thread
                 bit_counter = 0
+
+            # Log position every 30 seconds (150 frames at 0.2s/frame)
+            log_counter += 1
+            if log_counter >= 150:
+                buffer_minutes = len(io_bit_buffer) / 5 / 60  # 5 bits/sec
+                print(f"[Display] Position: digit {io_display_position} | Buffer: {len(io_bit_buffer)} bits ({buffer_minutes:.1f} min) | Cache: {io_cache_length} digits")
+                log_counter = 0
 
             # Control scroll speed (ONLY sleep in display loop)
             time.sleep(0.2)
