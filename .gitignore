@@ -6,5 +6,9 @@ config.json
 __pycache__/
 *.pyc
 
-# Visualizer virtual environment
+# Virtual environments
 visualizer/venv/
+ledmatrix/
+
+# Mode runtime cache files
+modes/*/cache*.txt
