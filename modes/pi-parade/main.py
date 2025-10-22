@@ -20,8 +20,8 @@ BRIGHTNESS = config.get("brightness", 0.2)
 pixels = neopixel.NeoPixel(PIN, LED_COUNT, brightness=BRIGHTNESS, auto_write=False)
 
 # Colors for binary display
-COLOR_ONE = (255, 200, 0)   # Yellow for 1
-COLOR_ZERO = (0, 50, 150)    # Blue for 0
+COLOR_ONE = (0, 255, 0)      # Green for 1
+COLOR_ZERO = (0, 0, 0)       # Off for 0
 
 # Snake path: bottom-right to top-left zigzag pattern
 def create_snake_path():
@@ -176,7 +176,7 @@ def main():
             render_matrix()
 
             # Control scroll speed (adjust as needed)
-            time.sleep(0.08)
+            time.sleep(0.2)
 
     except KeyboardInterrupt:
         print("\nStopping Pi Parade...")
