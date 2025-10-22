@@ -10,5 +10,6 @@ __pycache__/
 visualizer/venv/
 ledmatrix/
 
-# Mode runtime cache files
+# Mode runtime cache and state files
 modes/*/cache*.txt
+modes/*/calc_state.txt
