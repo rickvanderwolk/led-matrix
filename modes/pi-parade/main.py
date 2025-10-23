@@ -5,9 +5,6 @@ import json
 import board
 import neopixel
 import time
-import multiprocessing
-import threading
-from collections import deque
 from mpmath import mp
 
 CONFIG_PATH = os.environ.get("LEDMATRIX_CONFIG", "config.json")
@@ -24,14 +21,9 @@ pixels = neopixel.NeoPixel(PIN, LED_COUNT, brightness=BRIGHTNESS, auto_write=Fal
 COLOR_ONE = (0, 255, 0)      # Green for 1
 COLOR_ZERO = (0, 0, 0)       # Off for 0
 
-# Cache files (in mode directory)
+# Position file to track where we are
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-CACHE_FILE = os.path.join(SCRIPT_DIR, "cache.txt")
-POSITION_FILE = os.path.join(SCRIPT_DIR, "cache_position.txt")
-CALC_STATE_FILE = os.path.join(SCRIPT_DIR, "calc_state.txt")
-
-# Memory management
-CACHE_ROTATION_THRESHOLD = 100000  # Rotate cache file when > 100k digits
+POSITION_FILE = os.path.join(SCRIPT_DIR, "position.txt")
 
 # Snake path: bottom-right to top-left zigzag pattern
 def create_snake_path():
@@ -69,121 +61,25 @@ def digit_to_binary_bits(digit):
     binary = format(int(digit), '04b')
     return [int(b) for b in binary]
 
-def calculate_pi_digits(start_digit, num_digits):
-    """Calculate pi digits starting from start_digit position"""
-    # Set precision high enough to calculate the digits we need
-    # We need extra precision to ensure accuracy at the end
-    mp.dps = start_digit + num_digits + 100
+def calculate_pi_digit(position):
+    """Calculate a single digit of pi at the given position (0-indexed, after decimal point)"""
+    # Set precision high enough to calculate this digit
+    # We need extra precision to ensure accuracy
+    mp.dps = position + 50
 
     # Calculate pi and convert to string
     pi_str = str(mp.pi)
 
-    # Remove "3." from the beginning
+    # Remove "3." from the beginning to get just decimal digits
     pi_decimals = pi_str.replace('.', '')
 
-    # Extract the digits we need
-    if start_digit < len(pi_decimals):
-        return pi_decimals[start_digit:start_digit + num_digits]
-    return ""
+    # Return the digit at this position
+    if position < len(pi_decimals):
+        return pi_decimals[position]
+    return None
 
-def save_cache_append(new_digits):
-    """Append new digits to cache file"""
-    try:
-        with open(CACHE_FILE, 'a') as f:
-            f.write(new_digits)
-    except Exception as e:
-        print(f"Could not save cache: {e}")
-
-def rotate_cache_file():
-    """Remove old digits from cache file to prevent infinite growth"""
-    try:
-        # Read current cache
-        with open(CACHE_FILE, 'r') as f:
-            all_digits = f.read().strip()
-
-        # Keep only last 50k digits
-        if len(all_digits) > CACHE_ROTATION_THRESHOLD:
-            keep_from = len(all_digits) - 50000
-            new_cache = all_digits[keep_from:]
-
-            # Write back
-            with open(CACHE_FILE, 'w') as f:
-                f.write(new_cache)
-
-            print(f"[Calculator] Cache rotated: removed first {keep_from} digits, keeping last 50k")
-    except Exception as e:
-        print(f"Could not rotate cache: {e}")
-
-def load_calc_state():
-    """Load calculator state from disk"""
-    if os.path.exists(CALC_STATE_FILE):
-        try:
-            with open(CALC_STATE_FILE, 'r') as f:
-                return int(f.read().strip())
-        except:
-            pass
-    return 0
-
-def save_calc_state(offset):
-    """Save calculator state to disk"""
-    try:
-        with open(CALC_STATE_FILE, 'w') as f:
-            f.write(str(offset))
-    except Exception as e:
-        print(f"Could not save calc state: {e}")
-
-def calculator_process():
-    """Separate process that continuously calculates pi digits"""
-    try:
-        # Lower process priority to not interfere with display
-        os.nice(10)  # Lower priority (higher nice value)
-    except:
-        pass  # nice() not available on all platforms
-
-    print("[Calculator] Starting calculation process...")
-
-    # Load state
-    calculation_offset = load_calc_state()
-
-    # If no cache exists, create initial cache
-    if not os.path.exists(CACHE_FILE) or calculation_offset == 0:
-        print("[Calculator] Creating initial cache (2000 digits)...")
-        digits = calculate_pi_digits(0, 2000)
-        save_cache_append(digits)
-        calculation_offset = len(digits)
-        save_calc_state(calculation_offset)
-        print(f"[Calculator] Initial cache created: {calculation_offset} digits")
-
-    # Continuous calculation loop
-    while True:
-        # Calculate next batch of 500 digits (2000 bits)
-        print(f"[Calculator] Calculating pi digits {calculation_offset} to {calculation_offset + 500}...")
-        new_digits = calculate_pi_digits(calculation_offset, 500)
-
-        if new_digits:
-            # Save to disk
-            save_cache_append(new_digits)
-            calculation_offset += len(new_digits)
-            save_calc_state(calculation_offset)
-
-            print(f"[Calculator] Calculated up to digit {calculation_offset}")
-
-            # Check if we need to rotate cache file
-            if calculation_offset > CACHE_ROTATION_THRESHOLD and calculation_offset % 10000 == 0:
-                rotate_cache_file()
-
-        # Sleep between calculations to keep CPU usage reasonable
-        # This doesn't affect display smoothness since we're in separate process
-        time.sleep(1.0)
-
-# Shared state for I/O thread
-io_bit_buffer = deque()  # Bits loaded from cache
-io_display_position = 0  # Current display position (managed by I/O thread)
-io_position_dirty = False  # Flag: position needs to be saved
-io_cache_length = 0  # Length of cache file
-
-def load_display_position():
-    """Load display position from disk"""
+def load_position():
+    """Load current display position from disk"""
     if os.path.exists(POSITION_FILE):
         try:
             with open(POSITION_FILE, 'r') as f:
@@ -192,82 +88,13 @@ def load_display_position():
             pass
     return 0
 
-def save_display_position(position):
-    """Save display position to disk"""
+def save_position(position):
+    """Save current display position to disk"""
     try:
         with open(POSITION_FILE, 'w') as f:
             f.write(str(position))
     except Exception as e:
         print(f"Could not save position: {e}")
-
-def load_cache_digits():
-    """Load all cached digits from disk"""
-    if os.path.exists(CACHE_FILE):
-        try:
-            with open(CACHE_FILE, 'r') as f:
-                return f.read().strip()
-        except Exception as e:
-            print(f"Could not load cache: {e}")
-    return ""
-
-def io_thread_func():
-    """Async I/O thread - handles all file operations separate from display"""
-    global io_bit_buffer, io_display_position, io_position_dirty, io_cache_length
-
-    print("[I/O] Starting async I/O thread...")
-
-    # Wait for cache to exist (calculator process creates it)
-    while not os.path.exists(CACHE_FILE):
-        time.sleep(0.1)
-
-    # Load initial state
-    io_display_position = load_display_position()
-    cache_digits = load_cache_digits()
-    io_cache_length = len(cache_digits)
-
-    print(f"[I/O] Loaded cache: {io_cache_length} digits, position: {io_display_position}")
-
-    # Load initial buffer
-    if io_display_position < len(cache_digits):
-        digits_to_load = cache_digits[io_display_position:]
-    else:
-        digits_to_load = cache_digits
-        io_display_position = 0
-
-    for digit in digits_to_load[:1500]:  # 10 min buffer at 5 bits/sec
-        io_bit_buffer.extend(digit_to_binary_bits(digit))
-
-    print(f"[I/O] Initial buffer: {len(io_bit_buffer)} bits (~{len(io_bit_buffer)/5/60:.1f} min)")
-
-    last_cache_check = time.time()
-    last_position_save = time.time()
-
-    while True:
-        # Check for new cache data every 10 seconds
-        if time.time() - last_cache_check > 10.0:
-            new_cache = load_cache_digits()
-            if len(new_cache) > io_cache_length:
-                # New digits available
-                new_digits = new_cache[io_cache_length:]
-                io_cache_length = len(new_cache)
-
-                # Add to buffer
-                for digit in new_digits:
-                    io_bit_buffer.extend(digit_to_binary_bits(digit))
-
-                print(f"[I/O] Loaded {len(new_digits)} new digits (buffer: {len(io_bit_buffer)} bits)")
-
-            last_cache_check = time.time()
-
-        # Save position every 2 minutes if dirty
-        if io_position_dirty and time.time() - last_position_save > 120.0:
-            save_display_position(io_display_position)
-            io_position_dirty = False
-            last_position_save = time.time()
-            print(f"[I/O] Saved position: {io_display_position}")
-
-        # Sleep a bit to not hog CPU
-        time.sleep(0.5)
 
 # Initialize matrix state (all zeros)
 matrix = [0] * LED_COUNT
@@ -280,39 +107,48 @@ def render_matrix():
     pixels.show()
 
 def main():
-    global io_display_position, io_position_dirty
+    # Load starting position
+    current_digit_position = load_position()
 
-    # Start calculator process
-    calc_process = multiprocessing.Process(target=calculator_process, daemon=True)
-    calc_process.start()
-    print("[Display] Calculator process started")
+    print("Starting Pi Parade (Real-Time Mode)...")
+    print(f"Starting from digit position: {current_digit_position}")
+    print("Each digit is calculated in real-time as we go")
+    print("Display will naturally slow down as calculations get harder")
+    print("Running at full speed - no artificial delays!")
 
-    # Start I/O thread
-    io_thread = threading.Thread(target=io_thread_func, daemon=True)
-    io_thread.start()
-    print("[Display] I/O thread started")
-
-    # Wait for I/O thread to initialize
-    print("[Display] Waiting for I/O thread to load initial buffer...")
-    while len(io_bit_buffer) == 0:
-        time.sleep(0.1)
-
-    print("[Display] Starting Pi Parade...")
-    print("[Display] Each digit of pi is shown in 4-bit binary, scrolling through the matrix")
-
-    bit_counter = 0  # Count bits to track digit progression
-    log_counter = 0  # Count frames for periodic logging (every 30 sec)
+    bit_buffer = []  # Buffer to hold the 4 bits of current digit
+    last_log_position = current_digit_position
 
     try:
         while True:
-            # Get next bit from buffer (I/O thread keeps it filled)
-            if len(io_bit_buffer) > 0:
-                next_bit = io_bit_buffer.popleft()
-            else:
-                # Buffer empty (shouldn't happen), wait
-                print("[Display] Buffer empty, waiting...")
-                time.sleep(0.5)
-                continue
+            # If buffer is empty, calculate the next digit
+            if len(bit_buffer) == 0:
+                calc_start = time.time()
+
+                digit = calculate_pi_digit(current_digit_position)
+
+                calc_time = time.time() - calc_start
+
+                if digit is None:
+                    print(f"Could not calculate digit at position {current_digit_position}")
+                    break
+
+                # Convert digit to 4 bits and add to buffer
+                bit_buffer = digit_to_binary_bits(digit)
+
+                # Save position every digit
+                save_position(current_digit_position)
+
+                # Log every 10 digits
+                if current_digit_position - last_log_position >= 10:
+                    print(f"[Position {current_digit_position}] Digit: {digit} = {bit_buffer} (calculated in {calc_time:.3f}s)")
+                    last_log_position = current_digit_position
+
+                # Move to next digit for next time
+                current_digit_position += 1
+
+            # Get next bit from buffer
+            next_bit = bit_buffer.pop(0)
 
             # Shift all bits along the snake path
             for i in range(63, 0, -1):
@@ -324,32 +160,17 @@ def main():
             entry_pos = SNAKE_PATH[0]
             matrix[entry_pos] = next_bit
 
-            # Render to LEDs (ONLY operation in display loop = smooth!)
+            # Render to LEDs
             render_matrix()
 
-            # Update display position (in memory only)
-            bit_counter += 1
-            if bit_counter >= 4:
-                io_display_position += 1
-                io_position_dirty = True  # Mark for saving by I/O thread
-                bit_counter = 0
-
-            # Log position every 30 seconds (150 frames at 0.2s/frame)
-            log_counter += 1
-            if log_counter >= 150:
-                buffer_minutes = len(io_bit_buffer) / 5 / 60  # 5 bits/sec
-                print(f"[Display] Position: digit {io_display_position} | Buffer: {len(io_bit_buffer)} bits ({buffer_minutes:.1f} min) | Cache: {io_cache_length} digits")
-                log_counter = 0
-
-            # Control scroll speed (ONLY sleep in display loop)
-            time.sleep(0.2)
+            # Tiny sleep to keep SSH responsive
+            time.sleep(0.01)
 
     except KeyboardInterrupt:
-        print("\n[Display] Stopping Pi Parade...")
-        save_display_position(io_display_position)  # Final save
+        print("\nStopping Pi Parade...")
+        save_position(current_digit_position)
         pixels.fill((0, 0, 0))
         pixels.show()
-        calc_process.terminate()
 
 if __name__ == "__main__":
     main()
