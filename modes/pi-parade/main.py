@@ -65,6 +65,20 @@ def digit_to_binary_bits(digit):
     binary = format(int(digit), '04b')
     return [int(b) for b in binary]
 
+def number_to_binary_markers(number):
+    """Convert a number to binary representation with white markers"""
+    # Convert each digit of the number to binary
+    number_str = str(number)
+    markers = []
+
+    for digit_char in number_str:
+        digit_bits = digit_to_binary_bits(digit_char)
+        # Convert bits to white markers ('W') or black (0)
+        for bit in digit_bits:
+            markers.append('W' if bit == 1 else 0)
+
+    return markers
+
 # 7-segment display patterns for digits 0-9
 # Each digit is 3 columns wide x 5 rows tall
 # Format: list of 15 values (5 rows × 3 cols), 1=on, 0=off
@@ -121,53 +135,6 @@ DIGIT_PATTERNS = {
           1, 1, 1],
 }
 
-def show_progress_number(position):
-    """Display the current position number on the matrix in white"""
-    # Convert position to string
-    number_str = str(position)
-
-    # Clear the display first
-    pixels.fill(COLOR_BLACK)
-
-    # Calculate how to center the number
-    # Each digit is 3 cols wide, with 1 col spacing between digits
-    num_digits = len(number_str)
-    total_width = num_digits * 3 + (num_digits - 1)  # digits + spacing
-
-    # For 8x8 matrix, start position to center
-    if total_width <= 8:
-        start_col = (8 - total_width) // 2
-    else:
-        # If too wide, just start from left
-        start_col = 0
-        # Truncate to fit if needed
-        max_digits = (8 + 1) // 4  # max digits that fit with spacing
-        number_str = number_str[:max_digits]
-
-    # Display is 5 rows tall, center vertically
-    start_row = 1  # Start at row 1 (0-indexed) to center 5-row display
-
-    # Draw each digit
-    current_col = start_col
-    for digit_char in number_str:
-        if digit_char in DIGIT_PATTERNS:
-            pattern = DIGIT_PATTERNS[digit_char]
-
-            # Draw the 3x5 digit pattern
-            for row in range(5):
-                for col in range(3):
-                    if current_col + col < 8 and start_row + row < 8:
-                        pixel_index = (start_row + row) * 8 + (current_col + col)
-                        bit_value = pattern[row * 3 + col]
-                        pixels[pixel_index] = COLOR_WHITE if bit_value == 1 else COLOR_BLACK
-
-            # Move to next digit position (3 cols for digit + 1 col spacing)
-            current_col += 4
-
-    pixels.show()
-
-    # Hold the display for 2 seconds
-    time.sleep(2)
 
 def calculate_pi_digit(position):
     """Calculate a single digit of pi at the given position (0-indexed, after decimal point)"""
@@ -205,13 +172,19 @@ def save_position(position):
         print(f"Could not save position: {e}")
 
 # Initialize matrix state (all zeros)
+# Each element can be: 0, 1 (for binary), or 'W' for white progress marker
 matrix = [0] * LED_COUNT
 
 def render_matrix():
     """Render the current matrix state to the LEDs"""
     for i in range(LED_COUNT):
-        bit = matrix[i]
-        pixels[i] = COLOR_ONE if bit == 1 else COLOR_ZERO
+        value = matrix[i]
+        if value == 'W':
+            pixels[i] = COLOR_WHITE
+        elif value == 1:
+            pixels[i] = COLOR_ONE
+        else:
+            pixels[i] = COLOR_ZERO
     pixels.show()
 
 def main():
@@ -248,10 +221,14 @@ def main():
                 # Save position every digit
                 save_position(current_digit_position)
 
-                # Show progress indicator every 100 digits
+                # Add progress marker every 100 digits
+                # Insert white/black binary representation of position number
                 if current_digit_position > 0 and current_digit_position % 100 == 0 and current_digit_position != last_progress_display:
                     print(f"[MILESTONE] Reached digit {current_digit_position}!")
-                    show_progress_number(current_digit_position)
+                    # Convert position to binary markers (white for 1, black for 0)
+                    progress_markers = number_to_binary_markers(current_digit_position)
+                    # Prepend to buffer so it flows through the snake
+                    bit_buffer = progress_markers + bit_buffer
                     last_progress_display = current_digit_position
 
                 # Log every 10 digits
