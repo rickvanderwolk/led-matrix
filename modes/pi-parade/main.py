@@ -197,14 +197,6 @@ def main():
     print("Display will naturally slow down as calculations get harder", flush=True)
     print("Running at full speed - no artificial delays!", flush=True)
 
-    # Test: Flash the display to show it's working
-    print("Testing display...", flush=True)
-    pixels.fill((255, 0, 0))  # Red
-    pixels.show()
-    time.sleep(0.5)
-    pixels.fill((0, 0, 0))  # Off
-    pixels.show()
-    print("Display test complete!", flush=True)
 
     bit_buffer = []  # Buffer to hold the 4 bits of current digit
     last_log_position = current_digit_position
@@ -236,10 +228,8 @@ def main():
                     print(f"[MILESTONE] Reached digit {current_digit_position}!")
                     # Convert position to binary markers (white for 1, black for 0)
                     progress_markers = number_to_binary_markers(current_digit_position)
-                    print(f"[DEBUG] Progress markers for {current_digit_position}: {progress_markers}")
                     # Prepend to buffer so it flows through the snake
                     bit_buffer = progress_markers + bit_buffer
-                    print(f"[DEBUG] Buffer after adding markers: {bit_buffer}")
                     last_progress_display = current_digit_position
 
                 # Log every 10 digits
