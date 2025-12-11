@@ -2,7 +2,7 @@
 
 <img src="assets/preview.jpg" alt="preview" width="500">
 
-A Python (Raspberry Pi) project to control an 8x8 LED matrix with various visualization modes. Display clocks, sorting algorithms, color battles, and more.
+A Python (Raspberry Pi) project to control an 8x8 LED matrix with various visualization modes. Display a clock, sorting algorithms, color battles, remote control via ntfy.sh, and more.
 
 - [Hardware](#hardware)
 - [Connect LED matrix to Pi](#connect-led-matrix-to-pi)
