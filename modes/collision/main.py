@@ -186,11 +186,19 @@ def update():
     # Remove collided particles
     particles = [p for i, p in enumerate(particles) if i not in collided]
 
-    # Spawn new particles AFTER collision checks (so they don't skip their start position)
-    if random.random() < 0.3:
-        particles.append(spawn_particle())
-    if random.random() < 0.1:
-        particles.append(spawn_particle())
+    # Spawn new particles AFTER collision checks
+    for _ in range(2 if random.random() < 0.1 else (1 if random.random() < 0.3 else 0)):
+        new_particle = spawn_particle()
+        pos = new_particle.position()
+        # Check if spawning on an explosion remnant
+        if pos in explosions:
+            if new_particle.color == WHITE:
+                del explosions[pos]
+            else:
+                explosions[pos] = mix_colors(new_particle.color, explosions[pos])
+            # Particle is consumed, don't add it
+        else:
+            particles.append(new_particle)
 
 
 def render():
