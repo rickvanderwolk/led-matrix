@@ -90,8 +90,8 @@ class Particle:
 def spawn_particle():
     """Spawn a new particle from an edge, moving inward."""
     direction = random.choice(list(DIRECTIONS.keys()))
-    # 1/16 chance for white (cleaner)
-    if random.random() < 1/16:
+    # 1/32 chance for white (cleaner)
+    if random.random() < 1/32:
         color = WHITE
     else:
         color = random.choice(COLORS)
