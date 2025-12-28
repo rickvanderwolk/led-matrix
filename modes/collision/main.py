@@ -65,11 +65,15 @@ class Particle:
     def __init__(self, x, y, direction, color):
         self.x = x
         self.y = y
+        self.prev_x = x
+        self.prev_y = y
         self.direction = direction
         self.color = color
         self.dx, self.dy = DIRECTIONS[direction]
 
     def move(self):
+        self.prev_x = self.x
+        self.prev_y = self.y
         self.x += self.dx
         self.y += self.dy
 
@@ -78,6 +82,9 @@ class Particle:
 
     def position(self):
         return (self.x, self.y)
+
+    def prev_position(self):
+        return (self.prev_x, self.prev_y)
 
 
 def spawn_particle():
@@ -109,57 +116,81 @@ explosions = {}  # {(x, y): color} - permanent explosion remnants
 def update():
     global particles
 
-    # Chance to spawn new particles (can spawn 0, 1, or 2)
-    if random.random() < 0.3:
-        particles.append(spawn_particle())
-    if random.random() < 0.1:
-        particles.append(spawn_particle())
-
-    # Move all particles
+    # Move all particles FIRST
     for p in particles:
         p.move()
 
     # Remove out-of-bounds particles
     particles = [p for p in particles if not p.is_out_of_bounds()]
 
-    # Check for collisions between particles
-    positions = {}
     collided = set()
+    to_add = {}      # explosions to add/update
+    to_remove = set() # explosions to remove
 
+    # Check collision with explosion remnants FIRST
     for i, p in enumerate(particles):
         pos = p.position()
+        if pos in explosions:
+            if p.color == WHITE:
+                to_remove.add(pos)
+            else:
+                mixed = mix_colors(p.color, explosions[pos])
+                to_add[pos] = mixed
+            collided.add(i)
+
+    # Check for collisions between particles (same position)
+    positions = {}
+    for i, p in enumerate(particles):
+        if i in collided:
+            continue
+        pos = p.position()
         if pos in positions:
-            # Collision detected
             other_idx = positions[pos]
             other = particles[other_idx]
-            # If either particle is white, remove everything at this position
             if p.color == WHITE or other.color == WHITE:
-                if pos in explosions:
-                    del explosions[pos]
+                to_remove.add(pos)
             else:
-                # Both colored: mix colors
                 mixed = mix_colors(p.color, other.color)
-                explosions[pos] = mixed
+                to_add[pos] = mixed
             collided.add(i)
             collided.add(other_idx)
         else:
             positions[pos] = i
 
-    # Check collision with explosion remnants
+    # Check crossing particles (swapped positions)
     for i, p in enumerate(particles):
-        pos = p.position()
-        if pos in explosions and i not in collided:
-            if p.color == WHITE:
-                # White removes explosion remnant
-                del explosions[pos]
-            else:
-                # Color mixes with remnant
-                mixed = mix_colors(p.color, explosions[pos])
-                explosions[pos] = mixed
-            collided.add(i)
+        if i in collided:
+            continue
+        for j, other in enumerate(particles):
+            if j <= i or j in collided:
+                continue
+            if p.position() == other.prev_position() and p.prev_position() == other.position():
+                pos = p.position()
+                if p.color == WHITE or other.color == WHITE:
+                    to_remove.add(pos)
+                else:
+                    mixed = mix_colors(p.color, other.color)
+                    to_add[pos] = mixed
+                collided.add(i)
+                collided.add(j)
+
+    # Apply explosion changes
+    for pos in to_remove:
+        if pos in explosions:
+            del explosions[pos]
+        if pos in to_add:
+            del to_add[pos]
+    for pos, color in to_add.items():
+        explosions[pos] = color
 
     # Remove collided particles
     particles = [p for i, p in enumerate(particles) if i not in collided]
+
+    # Spawn new particles AFTER collision checks (so they don't skip their start position)
+    if random.random() < 0.3:
+        particles.append(spawn_particle())
+    if random.random() < 0.1:
+        particles.append(spawn_particle())
 
 
 def render():
