@@ -45,6 +45,7 @@ You're all set, the LED matrix will start automatically.
 ## Modes
 
 - [clock](https://github.com/rickvanderwolk/led-matrix/tree/main/modes/clock) - 4-quadrant clock with Pomodoro timer
+- [collision](https://github.com/rickvanderwolk/led-matrix/tree/main/modes/collision) - Colorful particle collisions with mixed color explosions
 - [evolving-square](https://github.com/rickvanderwolk/led-matrix/tree/main/modes/evolving-square) - Randomly evolving colored pixels
 - [led-sort](https://github.com/rickvanderwolk/led-matrix/tree/main/modes/led-sort) - Visualize sorting algorithms
 - [ntfy-sh](https://github.com/rickvanderwolk/led-matrix/tree/main/modes/ntfy-sh) - Remote control via ntfy.sh
