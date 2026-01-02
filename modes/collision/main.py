@@ -86,11 +86,7 @@ class Particle:
 def spawn_particle():
     """Spawn a new particle from an edge, moving inward."""
     direction = random.choice(list(DIRECTIONS.keys()))
-    # 1/64 chance for white (cleaner)
-    if random.random() < 1/64:
-        color = WHITE
-    else:
-        color = random.choice(COLORS)
+    color = random.choice(COLORS)
 
     if direction == 'right':
         x, y = 0, random.randint(0, 7)
@@ -106,8 +102,10 @@ def spawn_particle():
 
 # State
 particles = []
-trails = {}  # {(x, y): color} - permanent color trails
+trails = {}  # {(x, y): color} - color trails that fade over time
 flash_positions = set()  # positions that flash bright this frame
+FADE_AMOUNT = 3  # How much RGB values decrease per frame
+MIN_BRIGHTNESS = 10  # Trails below this total brightness disappear
 
 
 def update():
@@ -124,56 +122,37 @@ def update():
     for p in particles:
         p.move()
 
-    # Check for collisions and only leave color at collision points
+    # Every particle leaves a trail at its current position
     for i, p in enumerate(particles):
         if p.is_out_of_bounds():
             continue
 
         pos = p.position()
 
-        # Check collision with existing trail
+        # Mix with existing trail or create new
         if pos in trails:
-            if p.color == WHITE:
-                del trails[pos]
-                flash_positions.add(pos)
-            else:
-                trails[pos] = mix_colors(p.color, trails[pos])
-                flash_positions.add(pos)
-            continue
-
-        # Check collision with other particles (same position)
-        for j, other in enumerate(particles):
-            if i >= j or other.is_out_of_bounds():
-                continue
-            if pos == other.position():
-                # Collision! Leave color here
-                if p.color == WHITE or other.color == WHITE:
-                    flash_positions.add(pos)
-                else:
-                    trails[pos] = mix_colors(p.color, other.color)
-                    flash_positions.add(pos)
-                break
-
-        # Check crossing (particles swapped positions)
-        for j, other in enumerate(particles):
-            if i >= j or other.is_out_of_bounds():
-                continue
-            if pos == positions_before[j] and positions_before[i] == other.position():
-                # Crossed paths! Leave color at both positions
-                if p.color == WHITE or other.color == WHITE:
-                    if pos in trails:
-                        del trails[pos]
-                    if other.position() in trails:
-                        del trails[other.position()]
-                else:
-                    trails[pos] = mix_colors(p.color, other.color)
-                    trails[other.position()] = mix_colors(p.color, other.color)
-                flash_positions.add(pos)
-                flash_positions.add(other.position())
-                break
+            trails[pos] = mix_colors(p.color, trails[pos])
+            flash_positions.add(pos)  # Flash on overlap
+        else:
+            trails[pos] = p.color
 
     # Remove out-of-bounds particles
     particles = [p for p in particles if not p.is_out_of_bounds()]
+
+    # Fade all trails
+    to_remove = []
+    for pos, color in trails.items():
+        faded = (
+            max(0, color[0] - FADE_AMOUNT),
+            max(0, color[1] - FADE_AMOUNT),
+            max(0, color[2] - FADE_AMOUNT),
+        )
+        if sum(faded) < MIN_BRIGHTNESS:
+            to_remove.append(pos)
+        else:
+            trails[pos] = faded
+    for pos in to_remove:
+        del trails[pos]
 
     # Spawn new particles
     spawn_count = random.choices([0, 1, 2, 3], weights=[20, 40, 30, 10])[0]
