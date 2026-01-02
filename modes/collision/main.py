@@ -65,17 +65,16 @@ class Particle:
     def __init__(self, x, y, direction, color):
         self.x = x
         self.y = y
-        self.prev_x = x
-        self.prev_y = y
         self.direction = direction
         self.color = color
         self.dx, self.dy = DIRECTIONS[direction]
+        self.trail = [(x, y)]  # Track all positions visited
 
     def move(self):
-        self.prev_x = self.x
-        self.prev_y = self.y
         self.x += self.dx
         self.y += self.dy
+        if not self.is_out_of_bounds():
+            self.trail.append((self.x, self.y))
 
     def is_out_of_bounds(self):
         return self.x < 0 or self.x > 7 or self.y < 0 or self.y > 7
@@ -83,15 +82,12 @@ class Particle:
     def position(self):
         return (self.x, self.y)
 
-    def prev_position(self):
-        return (self.prev_x, self.prev_y)
-
 
 def spawn_particle():
     """Spawn a new particle from an edge, moving inward."""
     direction = random.choice(list(DIRECTIONS.keys()))
-    # 1/32 chance for white (cleaner)
-    if random.random() < 1/32:
+    # 1/64 chance for white (cleaner)
+    if random.random() < 1/64:
         color = WHITE
     else:
         color = random.choice(COLORS)
@@ -110,115 +106,109 @@ def spawn_particle():
 
 # State
 particles = []
-explosions = {}  # {(x, y): color} - permanent explosion remnants
+trails = {}  # {(x, y): color} - permanent color trails
+flash_positions = set()  # positions that flash bright this frame
 
 
 def update():
-    global particles
+    global particles, flash_positions
 
-    # Move all particles FIRST
+    flash_positions = set()
+
+    # Build position map for collision detection
+    positions_before = {}
+    for i, p in enumerate(particles):
+        positions_before[i] = p.position()
+
+    # Move all particles
     for p in particles:
         p.move()
+
+    # Check for collisions and only leave color at collision points
+    for i, p in enumerate(particles):
+        if p.is_out_of_bounds():
+            continue
+
+        pos = p.position()
+
+        # Check collision with existing trail
+        if pos in trails:
+            if p.color == WHITE:
+                del trails[pos]
+                flash_positions.add(pos)
+            else:
+                trails[pos] = mix_colors(p.color, trails[pos])
+                flash_positions.add(pos)
+            continue
+
+        # Check collision with other particles (same position)
+        for j, other in enumerate(particles):
+            if i >= j or other.is_out_of_bounds():
+                continue
+            if pos == other.position():
+                # Collision! Leave color here
+                if p.color == WHITE or other.color == WHITE:
+                    flash_positions.add(pos)
+                else:
+                    trails[pos] = mix_colors(p.color, other.color)
+                    flash_positions.add(pos)
+                break
+
+        # Check crossing (particles swapped positions)
+        for j, other in enumerate(particles):
+            if i >= j or other.is_out_of_bounds():
+                continue
+            if pos == positions_before[j] and positions_before[i] == other.position():
+                # Crossed paths! Leave color at both positions
+                if p.color == WHITE or other.color == WHITE:
+                    if pos in trails:
+                        del trails[pos]
+                    if other.position() in trails:
+                        del trails[other.position()]
+                else:
+                    trails[pos] = mix_colors(p.color, other.color)
+                    trails[other.position()] = mix_colors(p.color, other.color)
+                flash_positions.add(pos)
+                flash_positions.add(other.position())
+                break
 
     # Remove out-of-bounds particles
     particles = [p for p in particles if not p.is_out_of_bounds()]
 
-    collided = set()
-    to_add = {}      # explosions to add/update
-    to_remove = set() # explosions to remove
+    # Spawn new particles
+    spawn_count = random.choices([0, 1, 2, 3], weights=[20, 40, 30, 10])[0]
+    for _ in range(spawn_count):
+        particles.append(spawn_particle())
 
-    # Check collision with explosion remnants FIRST
-    for i, p in enumerate(particles):
-        pos = p.position()
-        if pos in explosions:
-            if p.color == WHITE:
-                to_remove.add(pos)
-            else:
-                mixed = mix_colors(p.color, explosions[pos])
-                to_add[pos] = mixed
-            collided.add(i)
 
-    # Check for collisions between particles (same position)
-    positions = {}
-    for i, p in enumerate(particles):
-        if i in collided:
-            continue
-        pos = p.position()
-        if pos in positions:
-            other_idx = positions[pos]
-            other = particles[other_idx]
-            if p.color == WHITE or other.color == WHITE:
-                to_remove.add(pos)
-            else:
-                mixed = mix_colors(p.color, other.color)
-                to_add[pos] = mixed
-            collided.add(i)
-            collided.add(other_idx)
-        else:
-            positions[pos] = i
-
-    # Check crossing particles (swapped positions)
-    for i, p in enumerate(particles):
-        if i in collided:
-            continue
-        for j, other in enumerate(particles):
-            if j <= i or j in collided:
-                continue
-            if p.position() == other.prev_position() and p.prev_position() == other.position():
-                pos = p.position()
-                if p.color == WHITE or other.color == WHITE:
-                    to_remove.add(pos)
-                else:
-                    mixed = mix_colors(p.color, other.color)
-                    to_add[pos] = mixed
-                collided.add(i)
-                collided.add(j)
-
-    # Apply explosion changes
-    for pos in to_remove:
-        if pos in explosions:
-            del explosions[pos]
-        if pos in to_add:
-            del to_add[pos]
-    for pos, color in to_add.items():
-        explosions[pos] = color
-
-    # Remove collided particles
-    particles = [p for i, p in enumerate(particles) if i not in collided]
-
-    # Spawn new particles AFTER collision checks
-    for _ in range(2 if random.random() < 0.1 else (1 if random.random() < 0.3 else 0)):
-        new_particle = spawn_particle()
-        pos = new_particle.position()
-        # Check if spawning on an explosion remnant
-        if pos in explosions:
-            if new_particle.color == WHITE:
-                del explosions[pos]
-            else:
-                explosions[pos] = mix_colors(new_particle.color, explosions[pos])
-            # Particle is consumed, don't add it
-        else:
-            particles.append(new_particle)
+def brighten(color, factor=1.5):
+    """Make a color brighter for flash effect."""
+    return (
+        min(255, int(color[0] * factor)),
+        min(255, int(color[1] * factor)),
+        min(255, int(color[2] * factor)),
+    )
 
 
 def render():
     # Clear display
     pixels.fill((0, 0, 0))
 
-    # Draw explosions (permanent remnants)
-    for (x, y), color in explosions.items():
+    # Draw trails (permanent color paths)
+    for (x, y), color in trails.items():
         if 0 <= x <= 7 and 0 <= y <= 7:
-            pixels[xy_to_index(x, y)] = color
+            idx = xy_to_index(x, y)
+            # Flash bright where particles crossed
+            if (x, y) in flash_positions:
+                pixels[idx] = brighten(color, 2.0)
+            else:
+                pixels[idx] = color
 
-    # Draw particles
+    # Draw active particles (brightest)
     for p in particles:
         if 0 <= p.x <= 7 and 0 <= p.y <= 7:
             idx = xy_to_index(p.x, p.y)
-            # If there's already an explosion here, brighten it
-            if (p.x, p.y) in explosions:
-                pixels[idx] = p.color
-            else:
-                pixels[idx] = p.color
+            pixels[idx] = brighten(p.color, 1.5)
 
     pixels.show()
 
