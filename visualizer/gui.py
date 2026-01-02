@@ -46,8 +46,11 @@ class LEDMatrixVisualizer:
         self.paused = False
         self.brightness = 1.0
 
-        # Font for status text
-        self.font = pygame.font.Font(None, 24)
+        # Font for status text (optional - may fail on some systems)
+        try:
+            self.font = pygame.font.Font(None, 24)
+        except Exception:
+            self.font = None
 
         # FPS tracking
         self.clock = pygame.time.Clock()
@@ -110,16 +113,17 @@ class LEDMatrixVisualizer:
                         self.led_size // 2 - 2
                     )
 
-        # Draw status bar
-        status_y = self.height * (self.led_size + self.spacing) + self.spacing + 10
+        # Draw status bar (if font available)
+        if self.font:
+            status_y = self.height * (self.led_size + self.spacing) + self.spacing + 10
 
-        status_text = f"FPS: {int(self.clock.get_fps())} | "
-        status_text += f"Brightness: {int(self.brightness * 100)}% | "
-        status_text += "PAUSED" if self.paused else "Running"
-        status_text += " | Q:Quit SPACE:Pause +/-:Brightness"
+            status_text = f"FPS: {int(self.clock.get_fps())} | "
+            status_text += f"Brightness: {int(self.brightness * 100)}% | "
+            status_text += "PAUSED" if self.paused else "Running"
+            status_text += " | Q:Quit SPACE:Pause +/-:Brightness"
 
-        text_surface = self.font.render(status_text, True, (200, 200, 200))
-        self.screen.blit(text_surface, (10, status_y))
+            text_surface = self.font.render(status_text, True, (200, 200, 200))
+            self.screen.blit(text_surface, (10, status_y))
 
         # Update display
         pygame.display.flip()
