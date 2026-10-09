@@ -120,11 +120,13 @@ def run_mode(mode_path, config_path=None):
     if neopixel_instance:
         def update_viz(pixels):
             if viz.running and not viz.paused:
+                viz.hardware_brightness = neopixel_instance.brightness
                 viz.set_pixels(pixels)
 
         neopixel_instance.set_update_callback(update_viz)
 
         # Set initial state
+        viz.hardware_brightness = neopixel_instance.brightness
         viz.set_pixels(neopixel_instance.get_pixels())
 
     # Run visualizer on main thread (blocking until closed)

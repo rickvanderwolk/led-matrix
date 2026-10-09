@@ -45,6 +45,10 @@ class LEDMatrixVisualizer:
         self.running = True
         self.paused = False
         self.brightness = 1.0
+        # LED look: square pixels, colors as the real LEDs give them off (L toggles)
+        self.led_look = True
+        self.hardware_brightness = 1.0  # brightness the mode set on the (mock) LEDs
+        self.raw_pixels = [(0, 0, 0)] * self.led_count
 
         # Font for status text (optional - may fail on some systems)
         try:
@@ -59,7 +63,22 @@ class LEDMatrixVisualizer:
     def set_pixels(self, pixels):
         """Update all pixel colors"""
         if len(pixels) == self.led_count:
+            self.raw_pixels = list(pixels)
             self.pixels = [self._apply_brightness(p) for p in pixels]
+
+    def _led_color(self, color):
+        """
+        What a real LED would show: the library scales each channel by the brightness
+        and truncates to whole steps, the LED gives off that much light (linear), and a
+        screen needs that light gamma-encoded to look the same to the eye.
+        """
+        out = []
+        top = max(1, int(255 * self.hardware_brightness))  # the brightest step the LED will show
+        for c in color:
+            level = int(c * self.hardware_brightness)  # what the LED actually receives
+            # Your eyes adjust to a dimmed matrix, so show its brightest step as full brightness
+            out.append(int(255 * (level / top) ** (1 / 2.2) * self.brightness))
+        return tuple(out)
 
     def set_pixel(self, index, color):
         """Update a single pixel color"""
@@ -81,7 +100,7 @@ class LEDMatrixVisualizer:
     def draw(self):
         """Draw the LED matrix"""
         # Clear screen with dark background
-        self.screen.fill((20, 20, 20))
+        self.screen.fill((0, 0, 0) if self.led_look else (20, 20, 20))
 
         # Draw each LED
         for y in range(self.height):
@@ -92,6 +111,13 @@ class LEDMatrixVisualizer:
                 # Calculate position
                 px = self.spacing + x * (self.led_size + self.spacing)
                 py = self.spacing + y * (self.led_size + self.spacing)
+
+                if self.led_look:
+                    color = self._led_color(self.raw_pixels[index])
+                    gap = 2  # a little extra black space between the pixels, like the walls of the grid
+                    size = self.led_size - 2 * gap
+                    pygame.draw.rect(self.screen, color, (px + gap, py + gap, size, size), border_radius=3)
+                    continue
 
                 # Get color
                 color = self.pixels[index] if index < len(self.pixels) else (0, 0, 0)
@@ -120,7 +146,7 @@ class LEDMatrixVisualizer:
             status_text = f"FPS: {int(self.clock.get_fps())} | "
             status_text += f"Brightness: {int(self.brightness * 100)}% | "
             status_text += "PAUSED" if self.paused else "Running"
-            status_text += " | Q:Quit SPACE:Pause +/-:Brightness"
+            status_text += " | Q:Quit SPACE:Pause +/-:Brightness L:Look"
 
             text_surface = self.font.render(status_text, True, (200, 200, 200))
             self.screen.blit(text_surface, (10, status_y))
@@ -143,6 +169,8 @@ class LEDMatrixVisualizer:
                     self.set_brightness(self.brightness + 0.1)
                 elif event.key == pygame.K_MINUS:
                     self.set_brightness(self.brightness - 0.1)
+                elif event.key == pygame.K_l:
+                    self.led_look = not self.led_look
 
     def run(self):
         """Main visualization loop (blocking)"""
