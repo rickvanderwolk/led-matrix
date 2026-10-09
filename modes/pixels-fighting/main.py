@@ -1,134 +1,88 @@
 #!/usr/bin/env python3
 
-import os
-import json
-import board
-import neopixel
 import random
 import time
-import math
+from core import Matrix
 
-CONFIG_PATH = os.environ.get("LEDMATRIX_CONFIG", "config.json")
-with open(CONFIG_PATH) as f:
-    config = json.load(f)
+matrix = Matrix()
 
-LED_COUNT = 64
-PIN = board.D18
-BRIGHTNESS = config.get("brightness", 0.2)
+# Fight attempts per second. Before, speed depended on how fast the hardware happened to be.
+ATTEMPTS_PER_SECOND = matrix.settings.get("speed", 200)
+FPS = 50
 
-pixels = neopixel.NeoPixel(PIN, LED_COUNT, brightness=BRIGHTNESS)
+CONTRASTING_COLOR_PAIRS = [
+    ((255, 0, 0), (0, 0, 255)),
+    ((255, 0, 0), (255, 255, 0)),
+    ((255, 0, 0), (0, 255, 0)),
+    ((0, 0, 255), (255, 255, 0)),
+    ((255, 0, 255), (0, 255, 255)),
+    ((255, 165, 0), (0, 128, 255)),
+    ((128, 0, 128), (0, 255, 128)),
+    ((57, 255, 20), (255, 20, 147)),
+    ((0, 255, 255), (255, 105, 180)),
+    ((255, 192, 203), (0, 0, 255)),
+    ((255, 255, 224), (255, 69, 0)),
+    ((139, 69, 19), (173, 255, 47)),
+    ((70, 130, 180), (255, 215, 0)),
+    ((0, 0, 0), (255, 255, 255)),
+    ((50, 50, 50), (255, 0, 255)),
+]
+
 last_color_pair_index = -1
 
-def initialize_battlefield():
+
+def pick_colors():
     global last_color_pair_index
-
-    contrasting_color_pairs = [
-        ((255, 0, 0), (0, 0, 255)),
-        ((255, 0, 0), (255, 255, 0)),
-        ((255, 0, 0), (0, 255, 0)),
-        ((0, 0, 255), (255, 255, 0)),
-        ((255, 0, 255), (0, 255, 255)),
-        ((255, 165, 0), (0, 128, 255)),
-        ((128, 0, 128), (0, 255, 128)),
-        ((57, 255, 20), (255, 20, 147)),
-        ((0, 255, 255), (255, 105, 180)),
-        ((255, 192, 203), (0, 0, 255)),
-        ((255, 255, 224), (255, 69, 0)),
-        ((139, 69, 19), (173, 255, 47)),
-        ((70, 130, 180), (255, 215, 0)),
-        ((0, 0, 0), (255, 255, 255)),
-        ((50, 50, 50), (255, 0, 255)),
-    ]
-
     new_index = last_color_pair_index
     while new_index == last_color_pair_index:
-        new_index = random.randint(0, len(contrasting_color_pairs) - 1)
-
+        new_index = random.randint(0, len(CONTRASTING_COLOR_PAIRS) - 1)
     last_color_pair_index = new_index
-    color1, color2 = contrasting_color_pairs[new_index]
+    return CONTRASTING_COLOR_PAIRS[new_index]
 
-    for i in range(LED_COUNT):
-        if i % 8 < 4:
-            pixels[i] = color1
-        else:
-            pixels[i] = color2
 
-    pixels.show()
-    return color1, color2
+def attempt(owner, counts, exponent):
+    """One random attack: a pixel from one side tries to take over a pixel bordering its territory."""
+    x, y = random.randint(0, 7), random.randint(0, 7)
+    target_x = random.randint(0, 7)
+    attacker = 0 if x < 4 else 1
+    target = y * 8 + target_x
 
-def colors_are_similar(color1, color2, tolerance=10):
-    return all(abs(c1 - c2) <= tolerance for c1, c2 in zip(color1, color2))
+    if owner[target] == attacker:
+        return None
+    if not any(owner[ny * 8 + nx] == attacker for nx, ny in matrix.neighbors(target_x, y)):
+        return None
 
-def count_color(target_color):
-    count = 0
-    for i in range(LED_COUNT):
-        if colors_are_similar(pixels[i], target_color):
-            count += 1
-    return count
+    # The bigger side wins more often
+    chance = (counts[attacker] / matrix.count) ** exponent
+    if random.random() < chance:
+        owner[target] = attacker
+        counts[attacker] += 1
+        counts[1 - attacker] -= 1
+        return target
+    return None
 
-def is_neighbor_same_color(x, y, color):
-    direct_neighbors = [
-        (x, y - 1),
-        (x - 1, y),
-        (x + 1, y),
-        (x, y + 1)
-    ]
 
-    for nx, ny in direct_neighbors:
-        if 0 <= nx < 8 and 0 <= ny < 8:
-            neighbor_index = ny * 8 + nx
-            if colors_are_similar(pixels[neighbor_index], color, tolerance=10):
-                return True
-    return False
+def fight():
+    colors = pick_colors()
+    owner = [0 if i % 8 < 4 else 1 for i in range(matrix.count)]
+    counts = [owner.count(0), owner.count(1)]
+    for i, side in enumerate(owner):
+        matrix[i] = colors[side]
+    matrix.show()
 
-def fight(color1, color2):
-    fight = True
     exponent = random.uniform(0.1, 0.3)
+    attempts_per_frame = max(1, round(ATTEMPTS_PER_SECOND / FPS))
 
-    while fight:
-        x, y = random.randint(0, 7), random.randint(0, 7)
-        opponent_x = random.randint(0, 7)
-        opponent_index = y * 8 + opponent_x
+    for _ in matrix.frames(fps=FPS):
+        for _ in range(attempts_per_frame):
+            target = attempt(owner, counts, exponent)
+            if target is not None:
+                matrix[target] = colors[owner[target]]
+            if matrix.count in counts:
+                matrix.show()
+                return
 
-        attacking_color = color1 if x < 4 else color2
-        defending_color = color2 if x < 4 else color1
 
-        if is_neighbor_same_color(opponent_x, y, attacking_color) and not colors_are_similar(pixels[opponent_index], attacking_color):
-            color1_count = count_color(color1)
-            color2_count = count_color(color2)
-            total_count = color1_count + color2_count
-
-            if total_count > 0:
-                chance_color1 = (color1_count / total_count) ** exponent
-                chance_color2 = (color2_count / total_count) ** exponent
-            else:
-                chance_color1 = chance_color2 = 0.5
-
-            if attacking_color == color1:
-                winner_color = color1 if random.random() < chance_color1 else defending_color
-            else:
-                winner_color = color2 if random.random() < chance_color2 else defending_color
-
-            pixels[opponent_index] = winner_color
-
-        pixels.show()
-
-        if count_color(color1) > LED_COUNT - 1:
-            pixels.fill(color1)
-            fight = False
-            time.sleep(1)
-            break
-        elif count_color(color2) > LED_COUNT - 1:
-            pixels.fill(color2)
-            fight = False
-            time.sleep(1)
-            break
-
-try:
-    while True:
-        color1, color2 = initialize_battlefield()
-        fight(color1, color2)
-        time.sleep(1)
-except KeyboardInterrupt:
-    pixels.fill((0, 0, 0))
-    pixels.show()
+while True:
+    fight()
+    time.sleep(2)

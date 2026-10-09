@@ -1,78 +1,68 @@
-import os
+#!/usr/bin/env python3
+
 import json
-import board
-import neopixel
+import sys
+import threading
+import time
 import websocket
+from core import Matrix, BLACK
 
-CONFIG_PATH = os.environ.get("LEDMATRIX_CONFIG", "config.json")
-with open(CONFIG_PATH) as f:
-    config = json.load(f)
+matrix = Matrix()
 
-LED_COUNT = 64
-PIN = board.D18
-BRIGHTNESS = config.get("brightness", 0.2)
-
-pixels = neopixel.NeoPixel(PIN, LED_COUNT, brightness=BRIGHTNESS, auto_write=False)
-current = [[0, 0, 0] for _ in range(LED_COUNT)]
-
-def render(squares):
-    for i in range(LED_COUNT):
-        pixels[i] = tuple(squares[i])
-    pixels.show()
 
 def handle_message(payload):
-    global current
-    try:
-        message = json.loads(payload)
-        data = message.get("data")
-        reset = message.get("reset", True)
-        default_color = message.get("color", [0, 255, 0])
-        squares = [[0, 0, 0] for _ in range(LED_COUNT)] if reset else [c[:] for c in current]
+    message = json.loads(payload)
+    data = message.get("data")
+    reset = message.get("reset", True)
+    default_color = message.get("color", [0, 255, 0])
+    squares = [BLACK] * matrix.count if reset else [matrix[i] for i in range(matrix.count)]
 
-        if isinstance(data, dict):
-            data = [data]
+    if isinstance(data, dict):
+        data = [data]
 
-        if isinstance(data, list):
-            for item in data:
-                if not isinstance(item, dict):
-                    continue
-                col = item.get("color", default_color)
-                if "index" in item and isinstance(item["index"], int):
-                    idx = item["index"]
-                    if 0 <= idx < LED_COUNT:
-                        squares[idx] = col
-                if "pattern" in item and isinstance(item["pattern"], list):
-                    offset = item.get("offset", 0)
-                    for i, bit in enumerate(item["pattern"]):
-                        if bit:
-                            idx = offset + i
-                            if 0 <= idx < LED_COUNT:
-                                squares[idx] = col
+    if isinstance(data, list):
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            col = tuple(item.get("color", default_color))
+            if "index" in item and isinstance(item["index"], int):
+                idx = item["index"]
+                if 0 <= idx < matrix.count:
+                    squares[idx] = col
+            if "pattern" in item and isinstance(item["pattern"], list):
+                offset = item.get("offset", 0)
+                for i, bit in enumerate(item["pattern"]):
+                    if bit:
+                        idx = offset + i
+                        if 0 <= idx < matrix.count:
+                            squares[idx] = col
 
-        current = [c[:] for c in squares]
-        render(squares)
+    for i, color in enumerate(squares):
+        matrix[i] = color
+    matrix.show()
 
-    except Exception:
-        pass
 
 def on_message(ws, message):
     try:
-        outer = json.loads(message)
-        inner = outer.get("message")
+        inner = json.loads(message).get("message")
         if inner:
             handle_message(inner)
-    except:
-        pass
+    except Exception as e:
+        print(f"Ignoring invalid message: {e}")
 
-topic = config.get("modes", {}).get("ntfy-sh", {}).get("topic")
+
+topic = matrix.settings.get("topic")
 if not topic:
     raise ValueError("No ntfy.sh topic found in config.json")
 
-ws_url = f"wss://ntfy.sh/{topic}/ws"
-ws = websocket.WebSocketApp(ws_url, on_message=on_message)
+ws = websocket.WebSocketApp(f"wss://ntfy.sh/{topic}/ws", on_message=on_message)
+listener = threading.Thread(target=ws.run_forever, daemon=True)
+listener.start()
 
-try:
-    ws.run_forever()
-except KeyboardInterrupt:
-    pixels.fill((0, 0, 0))
-    pixels.show()
+# Keep showing so scheduled brightness changes apply between messages
+while listener.is_alive():
+    matrix.show()
+    time.sleep(1)
+
+print("Connection to ntfy.sh closed")
+sys.exit(1)

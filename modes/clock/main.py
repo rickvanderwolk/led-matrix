@@ -1,21 +1,9 @@
 #!/usr/bin/env python3
 
-import os
-import json
-import board
-import neopixel
-import time
-from datetime import datetime, timedelta
+from datetime import datetime
+from core import Matrix, scale
 
-CONFIG_PATH = os.environ.get("LEDMATRIX_CONFIG", "config.json")
-with open(CONFIG_PATH) as f:
-    config = json.load(f)
-
-LED_COUNT = 64
-PIN = board.D18
-BRIGHTNESS = config.get("brightness", 0.2)
-
-pixels = neopixel.NeoPixel(PIN, LED_COUNT, brightness=BRIGHTNESS, auto_write=False)
+matrix = Matrix()
 
 # Pomodoro timer configuration
 # Timer starts at fixed times: :00 and :30 of each hour
@@ -87,17 +75,6 @@ def get_outer_ring_positions(quadrant):
 
     return positions
 
-def xy_to_led_index(x, y):
-    """
-    Convert x,y coordinates to LED index.
-    Linear layout: left to right, top to bottom (like reading a book)
-    Row 0: 0-7 (left to right)
-    Row 1: 8-15 (left to right)
-    Row 2: 16-23 (left to right)
-    etc.
-    """
-    return y * 8 + x
-
 def map_to_12(value, max_value):
     """
     Map a value (0 to max_value) to 12 positions (0.0-12.0).
@@ -167,8 +144,7 @@ def render_clock():
     # Get Pomodoro progress
     pomodoro_pos, is_work_session = get_pomodoro_progress()
 
-    # Clear all pixels
-    pixels.fill((0, 0, 0))
+    matrix.clear()
 
     # Get outer ring positions for each quadrant
     hour_ring = get_outer_ring_positions(0)     # Top-left
@@ -203,40 +179,10 @@ def render_clock():
                     # Trail LED - exponential falloff
                     brightness = 1.0 - ((distance - 1.0) / trail_length) ** 2
 
-                trailed_color = tuple(int(c * max(brightness, 0.1)) for c in color)
-                pixels[led_idx] = trailed_color
+                matrix[led_idx] = scale(color, max(brightness, 0.1))
             else:
                 # Outside trail range - very dim
-                pixels[led_idx] = tuple(int(c * 0.1) for c in color)
-
-    # Helper function to fill ring with discrete LEDs and trailing effect
-    def fill_ring_discrete(ring, progress, color, trail_length=5):
-        """Fill a ring with discrete LEDs (0.0-12.0) and trailing effect"""
-        # The current LED position (round up for discrete)
-        current_led = min(int(progress) + 1, 12)
-
-        # Fill all LEDs with trailing effect
-        for i in range(12):
-            if i >= current_led:
-                # Haven't reached this LED yet
-                continue
-
-            led_idx = ring[i]
-
-            # Distance from current LED
-            distance = current_led - 1 - i
-
-            if i == current_led - 1:
-                # Current LED - fully bright
-                pixels[led_idx] = color
-            elif distance < trail_length:
-                # Within trail range - exponential falloff
-                brightness = 1.0 - (distance / trail_length) ** 2
-                trailed_color = tuple(int(c * max(brightness, 0.1)) for c in color)
-                pixels[led_idx] = trailed_color
-            else:
-                # Outside trail range - very dim
-                pixels[led_idx] = tuple(int(c * 0.1) for c in color)
+                matrix[led_idx] = scale(color, 0.1)
 
     # Use one color for all quadrants: white for work, purple for break
     base_color = (255, 255, 255) if is_work_session else (128, 0, 255)
@@ -247,12 +193,5 @@ def render_clock():
     fill_ring_smooth(second_ring, second_pos, base_color)
     fill_ring_smooth(pomodoro_ring, pomodoro_pos, base_color)
 
-    pixels.show()
-
-try:
-    while True:
-        render_clock()
-        time.sleep(0.1)  # Update 10 times per second
-except KeyboardInterrupt:
-    pixels.fill((0, 0, 0))
-    pixels.show()
+for _ in matrix.frames(fps=10):
+    render_clock()

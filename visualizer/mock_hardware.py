@@ -33,9 +33,14 @@ class MockNeoPixel:
         """Set a pixel color"""
         if isinstance(index, slice):
             # Handle slice assignment
-            start, stop, step = index.indices(self.n)
-            for i in range(start, stop, step):
-                self._pixels[i] = self._ensure_tuple(val)
+            indices = range(*index.indices(self.n))
+            if isinstance(val, (list, tuple)) and val and isinstance(val[0], (list, tuple)):
+                # Sequence of colors, one per pixel
+                for i, color in zip(indices, val):
+                    self._pixels[i] = self._ensure_tuple(color)
+            else:
+                for i in indices:
+                    self._pixels[i] = self._ensure_tuple(val)
         else:
             if 0 <= index < self.n:
                 self._pixels[index] = self._ensure_tuple(val)
