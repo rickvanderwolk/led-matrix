@@ -30,9 +30,9 @@ def desired_state():
     when it changes. Brightness is left out: running modes pick that up themselves.
     """
     active = config.active(config.load(CONFIG_PATH))
-    mode = active.get("selected_mode")
+    mode = active.get("mode")
     fingerprint = json.dumps(
-        [mode, active.get("display"), active.get("modes", {}).get(mode)], sort_keys=True
+        [mode, active.get("display"), active.get("mode_settings", {}).get(mode)], sort_keys=True
     )
     return mode, fingerprint
 

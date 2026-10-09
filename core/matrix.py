@@ -2,7 +2,8 @@
 The LED matrix as modes see it: an 8x8 canvas you draw on, then show().
 
 Everything that isn't mode logic lives here: config, brightness (including the
-schedule), rotation/flipping, gamma, frame timing and switching the LEDs off on exit.
+schedule and fading), rotation/flipping, gamma, frame timing and switching the LEDs
+off on exit.
 """
 
 import atexit
@@ -22,6 +23,9 @@ WIDTH = 8
 HEIGHT = 8
 COUNT = WIDTH * HEIGHT
 CONFIG_CHECK_INTERVAL = 5  # seconds between checks for a scheduled brightness change
+FADE_SECONDS = 1.0  # fade in on start and on brightness changes
+FADE_OUT_SECONDS = 0.5  # fade out on exit, e.g. when switching modes
+FADE_STEPS_PER_SECOND = 30
 
 
 def _mode_name():
@@ -74,8 +78,8 @@ class Matrix:
         self._config_path = config_module.path()
         config = config_module.active(config_module.load(self._config_path))
 
-        # This mode's own settings: config["modes"][<mode name>]
-        self.settings = config.get("modes", {}).get(self.mode, {})
+        # This mode's own settings: config["mode_settings"][<mode name>]
+        self.settings = config.get("mode_settings", {}).get(self.mode, {})
 
         display = config.get("display", {})
         self._map = _build_map(display)
@@ -85,9 +89,12 @@ class Matrix:
         self._shown = None
         self._lock = threading.Lock()
         self._next_config_check = time.monotonic() + CONFIG_CHECK_INTERVAL
+        self._fade_id = 0  # bumped to cancel a running fade
 
-        self.brightness = config.get("brightness", 0.2)
-        self.pixels = neopixel.NeoPixel(board.D18, COUNT, brightness=self.brightness, auto_write=False)
+        # Start dark and fade in on the first frame
+        self.brightness = config_module.brightness(config)
+        self.pixels = neopixel.NeoPixel(board.D18, COUNT, brightness=0, auto_write=False)
+        self._started = False
 
         # Signal handlers can only be installed from the main thread (the visualizer runs
         # modes in a background thread and handles shutdown itself).
@@ -153,6 +160,10 @@ class Matrix:
                 self.pixels.show()
                 self._shown = frame
 
+            if not self._started:
+                self._started = True
+                self._fade_to(self.brightness, FADE_SECONDS)
+
     def frames(self, fps=30):
         """
         Loop at a steady frame rate: draw inside the loop, showing happens for you.
@@ -175,14 +186,40 @@ class Matrix:
                 next_time = time.monotonic()  # running behind: don't try to catch up
 
     def off(self):
-        """Switch all LEDs off (also happens automatically on exit)."""
-        with self._lock:
-            try:
+        """Fade out and switch all LEDs off (also happens automatically on exit)."""
+        self._fade_id += 1
+        try:
+            start = self.pixels.brightness
+            steps = int(FADE_OUT_SECONDS * FADE_STEPS_PER_SECOND)
+            for step in range(1, steps + 1):
+                with self._lock:
+                    self.pixels.brightness = start * (1 - step / steps)
+                    self.pixels.show()
+                time.sleep(FADE_OUT_SECONDS / steps)
+            with self._lock:
                 self.pixels.fill(BLACK)
                 self.pixels.show()
                 self._shown = None
-            except Exception:
-                pass
+        except Exception:
+            pass
+
+    def _fade_to(self, target, seconds):
+        """Fade the brightness to target in the background, replacing any running fade."""
+        self._fade_id += 1
+        fade_id = self._fade_id
+        start = self.pixels.brightness
+        steps = max(1, int(seconds * FADE_STEPS_PER_SECOND))
+
+        def run():
+            for step in range(1, steps + 1):
+                with self._lock:
+                    if fade_id != self._fade_id:
+                        return
+                    self.pixels.brightness = start + (target - start) * step / steps
+                    self.pixels.show()
+                time.sleep(seconds / steps)
+
+        threading.Thread(target=run, daemon=True).start()
 
     def _check_config(self):
         """Apply scheduled brightness changes without restarting the mode."""
@@ -191,10 +228,9 @@ class Matrix:
             return
         self._next_config_check = now + CONFIG_CHECK_INTERVAL
         try:
-            brightness = config_module.active(config_module.load(self._config_path)).get("brightness", 0.2)
+            brightness = config_module.brightness(config_module.active(config_module.load(self._config_path)))
         except (OSError, ValueError):
             return  # config is being edited or unreadable; keep the current brightness
         if brightness != self.brightness:
             self.brightness = brightness
-            self.pixels.brightness = brightness
-            self.pixels.show()
+            self._fade_to(brightness, FADE_SECONDS)

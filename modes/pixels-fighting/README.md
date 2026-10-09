@@ -7,7 +7,7 @@ Inspired by https://pixelsfighting.com/
 Optional, in `config.json`:
 
 ```json
-"modes": {
+"mode_settings": {
   "pixels-fighting": { "speed": 200 }
 }
 ```

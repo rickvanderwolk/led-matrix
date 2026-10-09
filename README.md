@@ -10,6 +10,8 @@ A Python (Raspberry Pi) project to control an 8x8 LED matrix with various visual
 - [Modes](#modes)
 - [Change mode](#change-mode)
 - [Change brightness](#change-brightness)
+- [Playlist](#playlist)
+- [Mode settings](#mode-settings)
 - [Schedule](#schedule)
 - [Display orientation](#display)
 - [Create a mode](#create-a-mode)
@@ -58,16 +60,50 @@ You're all set, the LED matrix will start automatically.
 <a id="change-mode"></a>
 ## Change mode
 
-Change `selected_mode` in `config.json`. For example: `{"selected_mode": "evolving-square"}` (use the directory name of the mode in the `modes` directory). 
+Change `mode` in `config.json`. For example: `{"mode": "evolving-square"}` (use the directory name of the mode in the `modes` directory).
 
-Changes to `config.json` are picked up automatically within a few seconds, no restart needed.
+Changes to `config.json` are picked up automatically within a few seconds, no restart needed. Modes fade out and in when switching.
 
 <a id="change-brightness"></a>
 ## Change brightness
 
 Change `brightness` in `config.json`. For example: `{"brightness": 0.25}` (use 0 to 1, 0 is off).
 
-Brightness changes are applied to the running mode without restarting it.
+Brightness changes fade in smoothly, without restarting the running mode.
+
+<a id="playlist"></a>
+## Playlist
+
+Instead of a single mode, `mode` can be a playlist that switches modes at a fixed interval:
+
+```json
+{
+  "mode": {
+    "playlist": ["collision", "pathfinder", "pixels-fighting", "led-sort"],
+    "every": 60,
+    "shuffle": true
+  }
+}
+```
+
+`every` is in minutes (default 60) and lines up with the clock: every 60 minutes switches on the hour. With `shuffle` every mode plays once per round, in a random order. The mode only depends on the time, so after a restart the same mode keeps playing.
+
+<a id="mode-settings"></a>
+## Mode settings
+
+Some modes have settings. They go in `mode_settings`, under the name of the mode, and apply whenever that mode runs (also in a playlist):
+
+```json
+{
+  "mode": "ntfy-sh",
+  "mode_settings": {
+    "ntfy-sh": { "topic": "90ad44f3b530" },
+    "pixels-fighting": { "speed": 150 }
+  }
+}
+```
+
+See the README of each mode for its settings.
 
 <a id="schedule"></a>
 ## Schedule
@@ -76,18 +112,22 @@ Change any config value at set times, for example to dim the matrix in the eveni
 
 ```json
 {
-  "selected_mode": "clock",
+  "mode": "clock",
   "brightness": 0.2,
   "schedule": [
-    { "from": "07:00", "brightness": 0.2, "selected_mode": "clock" },
-    { "from": "19:00", "selected_mode": "collision" },
+    { "from": "07:00", "mode": "clock", "brightness": 0.2 },
+    { "from": "18:00", "mode": { "playlist": ["collision", "pathfinder"], "every": 30 } },
     { "from": "21:30", "brightness": 0.05 },
     { "from": "23:00", "brightness": 0 }
   ]
 }
 ```
 
-Each entry overrides the keys it contains, from its `from` time until a later entry changes them again (wrapping around midnight). In the example above collision keeps running at 21:30, only dimmer. Entries can contain anything the config can, including mode settings like `"modes": {"led-sort": {...}}`.
+Each entry changes the keys it contains, from its `from` time until a later entry changes them again, wrapping around midnight. In the example above the playlist keeps playing at 21:30, only dimmer, and at 07:00 the clock comes back at full brightness.
+
+Because values stay until changed, a key that is set anywhere in the schedule needs an entry that sets it back (like 07:00 above). The values outside the schedule only apply to keys the schedule doesn't touch.
+
+Entries can contain anything the config can, including `mode_settings`, for example a different ntfy.sh topic in the evening: `{ "from": "18:00", "mode_settings": { "ntfy-sh": { "topic": "..." } } }`.
 
 The schedule uses the Pi's system time, so make sure the time zone is set (`sudo raspi-config` > Localisation Options > Timezone).
 
@@ -122,7 +162,7 @@ for frame in matrix.frames(fps=30):
 - `matrix[x, y] = (r, g, b)` or `matrix[index]` (row by row, 0 is top left). Writes outside the matrix are ignored, reads return `None`.
 - `matrix.fill(color)`, `matrix.clear()`, `matrix.neighbors(x, y)`, `matrix.width`, `matrix.height`, `matrix.count`
 - `matrix.frames(fps)` loops at a steady frame rate and shows each frame. For modes that don't fit a frame loop, call `matrix.show()` yourself (unchanged frames are skipped, so calling it often is cheap).
-- `matrix.settings` holds this mode's settings from `config.json` (`"modes": {"<mode-name>": {...}}`).
+- `matrix.settings` holds this mode's settings from `config.json` (`"mode_settings": {"<mode-name>": {...}}`). Changing them restarts the mode, so a mode can read them once at the start.
 - Color helpers: `hsv(h, s, v)`, `mix(color1, color2, t)`, `scale(color, factor)`, `BLACK`, `WHITE`.
 
 Try it without hardware using the [visualizer](https://github.com/rickvanderwolk/led-matrix/tree/main/visualizer).
