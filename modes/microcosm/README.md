@@ -6,7 +6,7 @@ A tiny world that lives on its own. Hills and hollows, ponds that fill and dry u
 
 In `config.json`, under `"modes": {"microcosm": {...}}`:
 
-- `day_minutes`: length of a day in minutes (default 6)
-- `year_days`: days in a year (default 8)
+- `day_minutes`: length of a day and night in minutes (default 20)
+- `season_minutes`: length of a season in minutes (default 480: a year takes 32 hours, so the seasons come at a different time every day)
 - `start_season`: `spring`, `summer`, `autumn` or `winter` (default random)
 - `plants`: `true` to add flowers, fruit and mushrooms (default `false`)

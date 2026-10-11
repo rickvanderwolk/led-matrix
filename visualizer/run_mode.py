@@ -95,11 +95,12 @@ def run_mode(mode_path, config_path=None):
     script_thread = threading.Thread(target=run_script, daemon=True)
     script_thread.start()
 
-    # Wait a moment for the script to create its NeoPixel instance
-    time.sleep(0.3)
-
-    # Get the NeoPixel instance
-    neopixel_instance = mock_hardware.MockNeoPixel.get_latest_instance()
+    # Wait for the script to create its NeoPixel instance (imports can take a while)
+    deadline = time.time() + 5
+    neopixel_instance = None
+    while neopixel_instance is None and time.time() < deadline:
+        time.sleep(0.05)
+        neopixel_instance = mock_hardware.MockNeoPixel.get_latest_instance()
 
     if neopixel_instance:
         print(f"Connected to NeoPixel instance ({neopixel_instance.n} LEDs)")

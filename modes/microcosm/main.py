@@ -54,13 +54,17 @@ pixels = neopixel.NeoPixel(PIN, LED_COUNT, brightness=BRIGHTNESS, auto_write=Fal
 W = H = 8
 FPS = 12
 FRAMES_PER_TICK = 3  # the world itself moves 4 times per second
-DAY_MINUTES = settings.get("day_minutes", 6)
-YEAR_DAYS = settings.get("year_days", 8)
-TICKS_PER_DAY = int(DAY_MINUTES * 60 * FPS / FRAMES_PER_TICK)
-TICKS_PER_YEAR = TICKS_PER_DAY * YEAR_DAYS
+TICKS_PER_SECOND = FPS // FRAMES_PER_TICK
+# A day of 20 minutes, seasons of 8 hours: a year of 32 hours doesn't fit a day on the clock,
+# so the seasons come at a different time every day
+DAY_MINUTES = settings.get("day_minutes", 20)
+SEASON_MINUTES = settings.get("season_minutes", 480)
+TICKS_PER_DAY = int(DAY_MINUTES * 60 * TICKS_PER_SECOND)
+TICKS_PER_YEAR = int(SEASON_MINUTES * 4 * 60 * TICKS_PER_SECOND)
+SAPLING = TICKS_PER_YEAR // 8  # a young tree, small enough to be nibbled away
 
 SEASONS = ["spring", "summer", "autumn", "winter"]
-SEASON_GRASS = {"spring": (40, 190, 30), "summer": (60, 165, 15), "autumn": (150, 115, 15), "winter": (70, 95, 40)}
+SEASON_GRASS = {"spring": (40, 190, 30), "summer": (60, 165, 15), "autumn": (135, 85, 20), "winter": (70, 95, 40)}
 SEASON_TREE = {"spring": (20, 120, 30), "summer": (10, 90, 20), "autumn": (190, 70, 5), "winter": (60, 40, 25)}
 WEATHER_CHANCES = {
     # how likely each weather is to come next, per season
@@ -71,7 +75,7 @@ WEATHER_CHANCES = {
 }
 WEATHER_DAYS = {"clear": 0.6, "rain": 0.3, "storm": 0.15, "drought": 0.5, "fog": 0.2}
 WEATHER_WATER = {"clear": 1.0, "rain": 2.5, "storm": 2.0, "drought": -0.4, "fog": 0.8}  # effect on grass
-PRECIPITATION = {"rain": 0.004, "storm": 0.007}  # cells of water per tick
+PRECIPITATION = {"rain": 6, "storm": 10}  # cells of water per day
 EVAPORATION = {"drought": 3.0, "clear": 1.0, "fog": 0.3, "rain": 0.0, "storm": 0.0}
 
 SOIL = (35, 22, 8)
@@ -80,8 +84,8 @@ ASH = (22, 18, 16)
 WATER = (10, 60, 170)
 ICE = (140, 185, 230)
 BURROW = (70, 35, 10)
-RABBIT = (255, 235, 190)
-FOX = (170, 50, 10)  # rust brown, steady; fire is bright and flickers
+RABBIT = (150, 130, 100)  # grey-brown like a wild rabbit; pure white outshines everything on real LEDs
+FOX = (145, 45, 10)  # rust brown, steady; fire is bright and flickers
 RAIN = (90, 140, 255)
 SNOW = (225, 232, 250)
 FLOWERS = [(255, 70, 190), (190, 110, 255), (255, 200, 60)]
@@ -91,7 +95,6 @@ FRUIT = (200, 30, 40)
 FROST = (200, 215, 235)
 MIST = (150, 160, 175)
 MOONLIGHT = (120, 140, 190)
-SUNSET = (255, 110, 50)
 MUSHROOM = (230, 40, 30)
 LOCUST = (190, 210, 40)
 BIRD = (215, 215, 225)
@@ -111,6 +114,15 @@ def scale(c, f):
     return tuple(max(0, min(255, int(v * f))) for v in c)
 
 
+def per_day(amount):
+    """Something that happens at a rate of `amount` per day, as a step per tick."""
+    return amount / TICKS_PER_DAY
+
+
+def per_year(amount):
+    return amount / TICKS_PER_YEAR
+
+
 def neighbors(x, y):
     return [(x + dx, y + dy) for dx, dy in ((0, -1), (-1, 0), (1, 0), (0, 1))
             if 0 <= x + dx < W and 0 <= y + dy < H]
@@ -126,18 +138,21 @@ class Animal:
         self.pos = pos
         self.energy = energy
         self.age = 0
-        # In the wild a rabbit lives about a year, a fox two to four (a year is YEAR_DAYS days)
+        # In the wild a rabbit lives about a year, a fox two to four
         years = random.uniform(0.5, 1.0) if kind == "rabbit" else random.uniform(2, 4)
-        self.lifespan = int(TICKS_PER_DAY * YEAR_DAYS * years)
+        self.lifespan = int(TICKS_PER_YEAR * years)
         self.flash = 6  # newborns glow for a moment
         self.asleep = False
         self.next_litter = 0  # age at which it can have young again
         self.rest_until = 0  # a resting animal stays down for a while, it doesn't doze on and off
         self.alert_until = 0  # after a scare, a rabbit stays awake and watchful for a while
-        # A body can only store so much, young need time to grow up before they breed
+        self.leaving = False  # on its way out of this piece of land
+        # A body can only store so much, young need time to grow up before they breed: a rabbit
+        # a few months, a fox most of a year. Rabbits can have a litter every month or so,
+        # foxes have one a year
         self.max_energy = 2.0 if kind == "rabbit" else 3.0
-        self.adult_age = TICKS_PER_DAY * (1 if kind == "rabbit" else 2)
-        self.pregnancy = TICKS_PER_DAY * (0.5 if kind == "rabbit" else 2)
+        self.adult_age = int(TICKS_PER_YEAR * (0.3 if kind == "rabbit" else 0.8))
+        self.pregnancy = int(TICKS_PER_YEAR * (0.08 if kind == "rabbit" else 0.5))
 
     def can_breed(self):
         return self.age > self.adult_age and self.age > self.next_litter
@@ -341,8 +356,23 @@ class World:
         return (self.tick % TICKS_PER_DAY) / TICKS_PER_DAY < 0.5
 
     def twilight(self, light):
-        """How much of a sunrise or sunset glow there is, 0-1."""
-        return max(0.0, 1 - abs(light - 0.15) / 0.15) if light > 0 else 0.0
+        """How much of a sunrise or sunset glow there is, 0-1: a golden hour that warms up
+        as the sun gets low, strongest just before it sets."""
+        if light <= 0:
+            return 0.0
+        return light / 0.15 if light < 0.15 else max(0.0, 1 - (light - 0.15) / 0.35)
+
+    def lit(self, color, x, y, light, sunny):
+        """A color as the sun shows it: darker and cooler at night, warmer at sunrise and sunset.
+        The light tints each color rather than painting over it, so things stay apart in the dusk."""
+        night = 1 - light
+        glow = self.twilight(light) if self.weather != "fog" else 0.0
+        color = (color[0] * (1 - 0.6 * night) * (1 + 1.2 * glow),
+                 color[1] * (1 - 0.45 * night) * (1 + 0.25 * glow),
+                 color[2] * (1 - 0.1 * night) * (1 - 0.5 * glow))
+        if sunny and light > 0:
+            color = scale(color, 1 - self.cloud_shade(x, y) * light)
+        return scale(color, 0.45 + 0.55 * light)
 
     def is_night(self):
         return self.light() < 0.15
@@ -380,7 +410,10 @@ class World:
         if edge:
             cells = [p for p in cells if p[0] in (0, W - 1) or p[1] in (0, H - 1)]
         if cells:
-            self.animals.append(Animal(kind, random.choice(cells), energy))
+            # Animals that settle here are grown ones, not newborns
+            animal = Animal(kind, random.choice(cells), energy)
+            animal.age = random.randint(animal.adult_age, (animal.adult_age + animal.lifespan) // 2)
+            self.animals.append(animal)
             return True
         return False
 
@@ -406,7 +439,7 @@ class World:
             self.birds_due = True
 
         # Warm and cold spells come and go over a couple of days
-        self.spell += -self.spell / (TICKS_PER_DAY * 1.5) + random.gauss(0, 0.09)
+        self.spell += -self.spell / (TICKS_PER_DAY * 1.5) + random.gauss(0, 3.4 / math.sqrt(TICKS_PER_DAY))
 
         self.wind += random.gauss(0, 0.01)
         self.update_weather()
@@ -441,45 +474,51 @@ class World:
 
         temperature = self.temperature()
         if self.weather in ("drought", "clear") and temperature > 18:
-            self.dryness = min(1.0, self.dryness + 0.0005)
+            self.dryness = min(1.0, self.dryness + per_day(0.7))
         elif self.weather in ("rain", "storm"):
-            self.dryness = max(0.0, self.dryness - 0.003)
+            self.dryness = max(0.0, self.dryness - per_day(4.3))
             for pos in list(self.fire):
                 if random.random() < 0.3:
                     del self.fire[pos]
 
-        if self.weather == "storm" and random.random() < 0.015:
+        if self.weather == "storm" and random.random() < per_day(22):
             self.lightning = 3
-            # Lightning goes for the tallest things: trees if there are any
-            strike = random.choice(list(self.trees)) if self.trees and random.random() < 0.7 else random.choice(CELLS)
-            victim = self.occupant(strike)
-            if victim and random.random() < 0.2:
-                self.kill(victim, (255, 255, 255))
-            fuel = 1.0 if strike in self.trees else self.grass[strike]
-            if strike not in self.water and self.snow < 0.3 and random.random() < fuel * (0.3 + self.dryness):
-                self.fire[strike] = 12 if strike in self.trees else 8
-                print("Event: lightning starts a fire")
+            # Most lightning stays in the clouds or comes down somewhere else; now and then it
+            # hits this piece of land, and then it goes for the tallest things: trees if there are any
+            if random.random() < 0.1:
+                self.strike()
+
+    def strike(self):
+        strike = random.choice(list(self.trees)) if self.trees and random.random() < 0.7 else random.choice(CELLS)
+        victim = self.occupant(strike)
+        if victim and random.random() < 0.2:
+            self.kill(victim, (255, 255, 255))
+        fuel = 1.0 if strike in self.trees else self.grass[strike]
+        if strike not in self.water and self.snow < 0.3 and random.random() < fuel * (0.3 + self.dryness):
+            self.fire[strike] = 12 if strike in self.trees else 8
+            print("Event: lightning starts a fire")
 
     def update_water(self):
         """Water fills the lowest ground. Rain and snowmelt add to it, warmth and sun take it away."""
         temperature = self.temperature()
-        falling = PRECIPITATION.get(self.weather, 0)
+        falling = per_day(PRECIPITATION.get(self.weather, 0))
         if temperature < 1:
             self.snow = min(1.0, self.snow + falling * 0.5)  # it snows
         else:
             self.volume += falling
         if temperature > 1 and self.snow > 0:
-            melt = min(self.snow, 0.0003 * (temperature - 1) * (0.5 + self.light()))
+            melt = min(self.snow, per_day(0.43) * (temperature - 1) * (0.5 + self.light()))
             self.snow -= melt
             self.volume += melt * 8  # meltwater runs into the hollows
         if temperature > 0 and self.ice < 0.5:
             heat = EVAPORATION[self.weather] * max(0.0, temperature) / 12 * (0.3 + self.light())
-            self.volume -= 0.00018 * heat * (2 + len(self.water))
+            self.volume -= per_day(0.26) * heat * (2 + len(self.water))
         # Water that reaches the edge of the land slowly runs off, like a stream out of the pond
         edge = sum(1 for x, y in self.water if x in (0, W - 1) or y in (0, H - 1))
-        self.volume -= 0.0003 * edge
+        self.volume -= per_day(0.43) * edge
         self.volume = max(0.0, min(float(len(CELLS) // 4), self.volume))
-        self.ice = max(0.0, min(1.0, self.ice + (-0.0005 * temperature if temperature < 0 else -0.002 * temperature)))
+        freeze = per_day(0.72) if temperature < 0 else per_day(2.9)
+        self.ice = max(0.0, min(1.0, self.ice - freeze * temperature))
 
         # The shoreline only moves for a real change: a whole cell more or less water, or dry
         # ground that has become clearly lower than the water's edge (no flickering back and forth)
@@ -508,9 +547,9 @@ class World:
     def update_land(self):
         """The ground itself changes: ponds silt up, rain washes soil downhill."""
         for pos in self.water:
-            self.height[pos] += 0.00002  # silt and plants slowly fill the pond
+            self.height[pos] += per_year(0.23)  # silt and plants slowly fill the pond
         if self.weather in ("rain", "storm"):
-            strength = 0.0004 if self.weather == "storm" else 0.0002
+            strength = per_day(0.58) if self.weather == "storm" else per_day(0.29)
             for pos in CELLS:
                 if pos in self.water or (pos in self.trees and random.random() < 0.8):
                     continue  # roots hold the soil
@@ -524,7 +563,7 @@ class World:
     def drain(self, pos):
         """Water leaves a cell: wet, bare and fertile ground remains."""
         self.water.discard(pos)
-        self.mud[pos] = TICKS_PER_YEAR // 2
+        self.mud[pos] = TICKS_PER_DAY * 4
         self.grass[pos] = 0.0
 
     def flood(self, pos):
@@ -564,16 +603,16 @@ class World:
                 seeding = max((self.grass[n] for n in near if n not in self.water), default=0)
                 shade = 0.7 if any(n in self.trees for n in near) else 1.0
                 growth = warmth * water * fed
-                rate = 0.004 * growth * (0.2 + light) * wet * shade
-                amount += rate * (1.05 - amount) + 0.0004 * growth * seeding
+                rate = per_day(5.8) * growth * (0.2 + light) * wet * shade
+                amount += rate * (1.05 - amount) + per_day(0.58) * growth * seeding
             else:
-                amount += 0.003 * water / wet
+                amount += per_day(0.75) * water / wet  # drought: the grass dries out slowly, it doesn't vanish
             self.grass[pos] = max(0.0, min(1.0, amount))
             self.lush[pos] = self.lush[pos] + 1 if self.grass[pos] > 0.75 else 0
 
             # Lush grass flowers on warm sunny days
             if (PLANTS and temperature > 12 and self.weather == "clear" and light > 0.5 and self.grass[pos] > 0.85
-                    and pos not in self.flowers and random.random() < 0.0004):
+                    and pos not in self.flowers and random.random() < per_day(0.58)):
                 self.flowers[pos] = (random.choice(FLOWERS), int(TICKS_PER_DAY * random.uniform(0.3, 0.8)))
 
         for pos in list(self.flowers):
@@ -612,7 +651,7 @@ class World:
                 near_trees = sum(n in self.trees for n in neighbors(*pos))
                 if near_trees >= 3:
                     continue  # too dark under dense woods for a seedling
-                chance = 0.0002 if near_trees else 0.00003  # woods spread, lone seeds blow in
+                chance = per_year(2.3) if near_trees else per_year(0.35)  # woods spread, lone seeds blow in
                 if ticks > TICKS_PER_DAY // 4 and pos not in self.burrows and random.random() < chance:
                     self.trees[pos] = 0
                     self.lush[pos] = 0
@@ -622,10 +661,10 @@ class World:
             self.trees[pos] += 1
             # Crowded woods and old age: trees eventually fall and leave a pit where the roots were
             crowded = sum(n in self.trees for n in neighbors(*pos))
-            if self.trees[pos] > TICKS_PER_YEAR * (3 - 0.4 * crowded) and random.random() < 0.0003:
+            if self.trees[pos] > TICKS_PER_YEAR * (3 - 0.4 * crowded) and random.random() < per_year(3.5):
                 del self.trees[pos]
                 self.grass[pos] = 0.3
-                self.fertile[pos] = TICKS_PER_YEAR // 2
+                self.fertile[pos] = TICKS_PER_DAY * 4
                 self.height[pos] -= 0.12
                 mound = random.choice(neighbors(*pos))
                 self.height[mound] += 0.08
@@ -648,7 +687,7 @@ class World:
         # Asleep at night; a hungry rabbit wakes up and eats its fill before it sleeps again,
         # and a rabbit startled by a fox stays alert for a while
         if danger <= 2:
-            rabbit.alert_until = self.tick + TICKS_PER_DAY // 30
+            rabbit.alert_until = self.tick + TICKS_PER_SECOND * 12
         startled = self.tick < rabbit.alert_until
         if rabbit.asleep:
             rabbit.asleep = self.is_night() and rabbit.energy > 0.4 and not startled
@@ -679,21 +718,21 @@ class World:
 
         # Snow hides the grass; in a burrow or asleep a rabbit uses little energy
         if rabbit.pos not in self.water and not rabbit.asleep and rabbit.energy < self.capacity(rabbit) - 0.1:
-            bite = min(self.grass[rabbit.pos], 0.01) * (1 - 0.8 * self.snow)  # only eats when hungry
+            bite = min(self.grass[rabbit.pos], per_day(14)) * (1 - 0.8 * self.snow)  # only eats when hungry
             self.grass[rabbit.pos] -= bite
             rabbit.energy += bite
         sheltered = rabbit.pos in self.burrows
-        # A full rabbit lasts about a third of a day awake, longer resting in a burrow
+        # A full rabbit can go about a day without food, longer resting in a burrow
         if rabbit.asleep:
-            rabbit.energy -= 0.001 if sheltered else 0.0015
+            rabbit.energy -= per_day(0.35) if sheltered else per_day(0.55)
         else:
-            rabbit.energy -= 0.004 + (0.001 if cold else 0)  # staying warm costs energy
+            rabbit.energy -= per_day(1.5) + (per_day(0.4) if cold else 0)  # staying warm costs energy
         # When grass is scarce or under snow, rabbits gnaw bark from trees next to them
         if not rabbit.asleep and rabbit.energy < 1.0 and (self.snow > 0.3 or self.grass[rabbit.pos] < 0.1):
             trees = [n for n in neighbors(*rabbit.pos) if n in self.trees]
             if trees:
-                rabbit.energy += 0.004
-                if random.random() < 0.0005:
+                rabbit.energy += per_day(1.5)
+                if random.random() < per_year(5.8):
                     gnawed = random.choice(trees)
                     if self.trees[gnawed] < TICKS_PER_YEAR:  # a young tree ringed bare dies
                         del self.trees[gnawed]
@@ -701,21 +740,21 @@ class World:
         for treats, value in ((self.mushrooms, 0.3), (self.wood_flowers, 0.2), (self.fruit, 0.4)):
             if treats.pop(rabbit.pos, None):
                 rabbit.energy += value
-        if rabbit.pos in self.trees and self.trees[rabbit.pos] < TICKS_PER_DAY and random.random() < 0.05:
+        if rabbit.pos in self.trees and self.trees[rabbit.pos] < SAPLING and random.random() < per_year(576):
             del self.trees[rabbit.pos]  # a sapling nibbled away
             self.grass[rabbit.pos] = 0.3
 
         rabbit.energy = min(rabbit.energy, self.capacity(rabbit))
 
         # Rabbits breed while the days are long
-        if (rabbit.energy > 1.5 and self.day_length() > 0.5 and rabbit.can_breed() and random.random() < 0.03
+        if (rabbit.energy > 1.5 and self.day_length() > 0.5 and rabbit.can_breed() and random.random() < per_day(43)
                 and self.has_mate(rabbit)):
-            self.give_birth(rabbit, 0.6, 0.8)
+            self.give_birth(rabbit, random.randint(1, 3), 0.6, 0.3)
 
         # Dig a new burrow, away from the others (and lower the ground a little)
         far = not self.burrows or min(distance(rabbit.pos, b) for b in self.burrows) > 2
         if (far and not cold and rabbit.energy > 1.2 and rabbit.pos not in self.trees
-                and rabbit.pos not in self.water and random.random() < 0.002):
+                and rabbit.pos not in self.water and random.random() < per_day(2.9)):
             self.burrows[rabbit.pos] = self.tick
             self.height[rabbit.pos] -= 0.03
             print("Event: rabbits dig a new burrow")
@@ -735,14 +774,26 @@ class World:
             elif not night and fox.energy > 1.0 and self.light() > 0.6:
                 fox.rest_until = self.tick + int(TICKS_PER_DAY * random.uniform(0.05, 0.1))
         fox.asleep = self.tick < fox.rest_until
+        rabbits = [a for a in self.animals if a.kind == "rabbit"]
+        # A fox's territory is far bigger than this piece of land: after a while it moves on
+        # (young ones go along with the family), sooner when there is nothing to catch here
+        if not fox.asleep and not fox.leaving and random.random() < per_day(1 if rabbits else 3):
+            fox.leaving = True
         # A fox needs about one rabbit every two to three days
         if fox.asleep or (not night and self.tick % 2):
-            fox.energy -= 0.0002
+            fox.energy -= per_day(0.29)
         else:
-            rabbits = [a for a in self.animals if a.kind == "rabbit"]
             prey = min(rabbits, key=lambda r: distance(fox.pos, r.pos), default=None)
             options = [n for n in neighbors(*fox.pos) if self.walkable(n, "fox")]
-            if prey and not full and distance(fox.pos, prey.pos) <= 3:
+            if fox.leaving:
+                edge = min(fox.pos[0], W - 1 - fox.pos[0], fox.pos[1], H - 1 - fox.pos[1])
+                if edge == 0:
+                    self.animals.remove(fox)
+                    print("Event: a fox moves on")
+                    return
+                target = min(options, key=lambda n: min(n[0], W - 1 - n[0], n[1], H - 1 - n[1]) + random.uniform(0, 0.5),
+                             default=fox.pos)
+            elif prey and not full and distance(fox.pos, prey.pos) <= 3:
                 # Hungry and on the hunt: a sprint straight at the prey (a full fox leaves rabbits be)
                 target = min(options, key=lambda n: distance(n, prey.pos) + random.uniform(0, 0.5), default=fox.pos)
             elif options and random.random() < 0.2:
@@ -751,7 +802,7 @@ class World:
                 target = fox.pos
 
             other = self.occupant(target)
-            if other and other.kind == "rabbit" and not full:
+            if other and other.kind == "rabbit" and not full and not fox.leaving:
                 hidden = target in self.trees and not night  # cover under the trees
                 if not hidden and random.random() < (0.45 if night else 0.2):
                     self.kill(other, (255, 0, 0))
@@ -759,14 +810,14 @@ class World:
                     fox.pos = target
             elif not other and target not in self.water:
                 fox.pos = target
-            fox.energy -= 0.0008 if self.temperature() < 0 else 0.0006
+            fox.energy -= per_day(1.15) if self.temperature() < 0 else per_day(0.86)
 
         fox.energy = min(fox.energy, self.capacity(fox))
 
         # Foxes breed in early spring, when the days are getting longer
-        if (fox.energy > 2.0 and self.season() == "spring" and fox.can_breed() and random.random() < 0.05
+        if (fox.energy > 2.0 and self.season() == "spring" and fox.can_breed() and random.random() < per_day(72)
                 and self.has_mate(fox)):
-            self.give_birth(fox, 0.9, 1.2)
+            self.give_birth(fox, random.randint(1, 3), 0.9, 0.4)
 
         if fox.energy <= 0 or fox.age > fox.lifespan:
             self.kill(fox, (60, 30, 10))
@@ -776,16 +827,19 @@ class World:
         return animal.max_energy * (1.75 if self.season() in ("autumn", "winter") else 1.0)
 
     def has_mate(self, animal):
-        """Young need two parents: another adult of the same kind close by."""
-        return any(other is not animal and other.kind == animal.kind and other.is_adult()
-                   and distance(other.pos, animal.pos) <= 2 for other in self.animals)
+        """Young need two parents: another adult of the same kind. This piece of land is small
+        compared with how far animals roam, so any adult here can find the other."""
+        return any(other is not animal and other.kind == animal.kind and other.is_adult() for other in self.animals)
 
-    def give_birth(self, parent, child_energy, cost):
+    def give_birth(self, parent, litter, child_energy, cost):
+        """A litter of young next to the parent, as many as there is room for."""
         free = [n for n in neighbors(*parent.pos)
                 if self.walkable(n, parent.kind) and n not in self.water and not self.occupant(n)]
-        if free:
-            self.animals.append(Animal(parent.kind, random.choice(free), child_energy))
-            parent.energy -= cost
+        born = random.sample(free, min(litter, len(free)))
+        for pos in born:
+            self.animals.append(Animal(parent.kind, pos, child_energy))
+        if born:
+            parent.energy -= cost * (1 + len(born))
             parent.next_litter = parent.age + parent.pregnancy
 
     def arrivals(self):
@@ -793,21 +847,14 @@ class World:
         if self.snow > 0.5:
             return
         food = sum(self.grass.values()) / len(CELLS) * (1 - self.snow)
-        if food > 0.3 and random.random() < 2 / TICKS_PER_DAY:
+        if food > 0.3 and random.random() < per_day(0.25):
             if self.spawn("rabbit", 1.0, edge=True):
                 print("Event: a rabbit wanders in")
-        # Foxes hold a territory: a newcomer only settles where there's room for it (a pair at most)
-        adults = [a for a in self.animals if a.kind == "fox" and a.is_adult()]
-        if self.count("rabbit") >= 3 and len(adults) < 2 and random.random() < 1 / (TICKS_PER_DAY * 2):
-            if self.spawn("fox", 1.5, edge=True):
-                self.animals[-1].age = self.animals[-1].adult_age + 1  # a grown fox looking for a home
-                print("Event: a fox wanders in")
-        # Grown-up young foxes leave to find a territory of their own
-        if len(adults) > 2:
-            youngest = min(adults, key=lambda a: a.age)
-            if random.random() < 1 / (TICKS_PER_DAY * 0.5):
-                self.animals.remove(youngest)
-                print("Event: a young fox leaves to find its own territory")
+        # Foxes roaming their territory come by now and then; they keep out of each other's way,
+        # so there are never more than a couple of them here at once
+        if self.count("fox") < 2 and random.random() < per_day(0.2):
+            if self.spawn("fox", random.uniform(0.8, 1.6), edge=True):
+                print("Event: a fox comes by")
 
     def nature(self):
         """Things that happen when the conditions are right."""
@@ -825,7 +872,7 @@ class World:
         # Abundant grass on a hot day draws locusts
         grass = sum(self.grass.values()) / len(CELLS)
         if (temperature > 20 and light > 0.5 and grass > 0.75 and self.weather in ("clear", "drought")
-                and not any(isinstance(e, Locusts) for e in self.effects) and random.random() < 0.002):
+                and not any(isinstance(e, Locusts) for e in self.effects) and random.random() < per_day(2.9)):
             self.effects.append(Locusts())
             print("Event: a locust swarm comes for the grass")
 
@@ -833,7 +880,7 @@ class World:
         if PLANTS and self.weather == "rain" and 5 < temperature < 16:
             for pos in CELLS:
                 if (pos not in self.water and pos not in self.trees and pos not in self.mushrooms
-                        and any(n in self.trees for n in neighbors(*pos)) and random.random() < 0.0005):
+                        and any(n in self.trees for n in neighbors(*pos)) and random.random() < per_day(0.72)):
                     self.mushrooms[pos] = int(TICKS_PER_DAY * random.uniform(0.5, 1.0))
         for pos in list(self.mushrooms):
             self.mushrooms[pos] -= 1
@@ -845,12 +892,12 @@ class World:
         if PLANTS and season == "spring" and temperature > 6 and light > 0.3:
             for pos in CELLS:
                 if (pos not in self.water and pos not in self.trees and pos not in self.wood_flowers
-                        and any(n in self.trees for n in neighbors(*pos)) and random.random() < 0.0003):
+                        and any(n in self.trees for n in neighbors(*pos)) and random.random() < per_day(0.43)):
                     self.wood_flowers[pos] = (random.choice(WOOD_FLOWERS), int(TICKS_PER_DAY * random.uniform(0.5, 1.5)))
         # In late summer and autumn, ripe fruit drops from old trees
         if PLANTS and season in ("summer", "autumn") and self.summer_ness() < 0.3:
             for pos, age in self.trees.items():
-                if age > TICKS_PER_YEAR and random.random() < 0.0003:
+                if age > TICKS_PER_YEAR and random.random() < per_day(0.43):
                     spot = random.choice(neighbors(*pos))
                     if spot not in self.water and spot not in self.trees:
                         self.fruit[spot] = int(TICKS_PER_DAY * random.uniform(0.5, 1.5))
@@ -866,13 +913,13 @@ class World:
 
         # Frost on clear freezing nights, mist over the water when a cold night meets the sun
         if temperature < 0 and self.weather == "clear" and self.is_night():
-            self.frost = min(1.0, self.frost + 0.002)
+            self.frost = min(1.0, self.frost + per_day(2.9))
             if self.water:
-                self.mist = min(1.0, self.mist + 0.001)
+                self.mist = min(1.0, self.mist + per_day(1.4))
         elif temperature > 2:
-            self.frost = max(0.0, self.frost - 0.004 * (0.3 + light))
+            self.frost = max(0.0, self.frost - per_day(5.8) * (0.3 + light))
             if light > 0.4:
-                self.mist = max(0.0, self.mist - 0.003)
+                self.mist = max(0.0, self.mist - per_day(4.3))
 
     # Drawing
 
@@ -908,7 +955,6 @@ class World:
         for pos in CELLS:
             x, y = pos
             light = column_light[x]
-            night = 1 - light
             if pos in self.fire:
                 color = mix((255, 30, 0), (255, 220, 60), random.random() ** 0.7)
             elif pos in self.water:
@@ -917,7 +963,7 @@ class World:
                     shimmer = 1.4  # raindrops on the water
                 color = mix(scale(WATER, shimmer), ICE, min(1.0, self.ice * 1.5))
             elif pos in self.trees:
-                young = min(1.0, self.trees[pos] / TICKS_PER_DAY)
+                young = min(1.0, self.trees[pos] / SAPLING)
                 color = mix(mix(grass_color, tree_color, 0.4 + 0.6 * young), SNOW, 0.5 * self.snow)
             elif pos in self.burrows:
                 color = mix(BURROW, SNOW, 0.6 * self.snow)
@@ -949,14 +995,9 @@ class World:
             if self.weather == "fog":
                 color = mix(color, (70, 70, 75), 0.45)
 
-            # Night: darker and bluer, a warm glow at sunrise and sunset, fire stays bright
+            # Fire gives light of its own, everything else is lit by the sun
             if pos not in self.fire:
-                color = (color[0] * (1 - 0.5 * night), color[1] * (1 - 0.4 * night), color[2] + 25 * night)
-                if self.weather != "fog":
-                    color = mix(color, SUNSET, 0.4 * self.twilight(light))
-                if sunny and light > 0:
-                    color = scale(color, 1 - self.cloud_shade(x, y) * light)
-                color = scale(color, 0.5 + 0.5 * light)
+                color = self.lit(color, x, y, light, sunny)
                 if pos in self.water and light == 0 and self.weather == "clear" and self.ice < 0.5:
                     glint = max(0.0, math.sin(frame * 0.07 + x * 0.9 - y * 0.6)) ** 6
                     color = mix(color, MOONLIGHT, 0.5 * glint)  # moonlight on the water
@@ -973,19 +1014,19 @@ class World:
             if (x, y) not in self.water:
                 canvas[y * W + x] = scale(FIREFLY, 0.7)
 
-        # Animals and what happens to them give no light of their own: at night you see less of them
+        # Animals and what happens to them give no light of their own: the same light falls on them
         for animal in self.animals:
             x, y = animal.pos
             f = 0.6 if animal.asleep else 1.0
             if animal.flash:
                 f *= 1.15  # a newborn is a little brighter for a moment
-            f *= 0.5 + 0.5 * column_light[x]
-            canvas[y * W + x] = scale(RABBIT if animal.kind == "rabbit" else FOX, f)
+            color = scale(RABBIT if animal.kind == "rabbit" else FOX, f)
+            canvas[y * W + x] = self.lit(color, x, y, column_light[x], sunny)
 
         for pos in list(self.flashes):
             color, left = self.flashes[pos]
             i = pos[1] * W + pos[0]
-            shown = scale(color, 0.5 + 0.5 * column_light[pos[0]])
+            shown = self.lit(color, pos[0], pos[1], column_light[pos[0]], sunny)
             canvas[i] = mix(canvas[i], shown, 0.6 * left / 6)
             if left <= 1:
                 del self.flashes[pos]
@@ -1023,6 +1064,7 @@ def show(canvas):
 
 
 world = World()
+print(f"Start: {world.season()}, {world.temperature():.0f}°")
 frame = 0
 try:
     while True:
