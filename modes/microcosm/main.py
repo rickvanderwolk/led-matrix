@@ -30,7 +30,8 @@ rescued: whatever disappears can come back, but only when the conditions allow i
   glints on the water, mist rises from it after a cold clear night, and frost makes
   the grass sparkle at dawn. Wind ripples through the grass and on sunny days cloud
   shadows drift across the land.
-- Nights are dark, lighter under a full moon; the moon waxes and wanes over a month,
+- The light itself changes color: white at midday, golden as the sun gets low, deep
+  blue just after sunset, dark blue at night. Nights are dark, lighter under a full moon; the moon waxes and wanes over a month,
   and foxes hunt best by its light. Still water mirrors the sky: a sunset glow, stars,
   the moon. A low sun brings out the hills, and hollows stay moist and darker green.
 - What the wind carries can be seen: snowflakes drift down, seed fluff blows off the
@@ -115,25 +116,39 @@ SKY_GLOW = (255, 120, 60)  # a sunset sky mirrored in the water
 SEED = (235, 230, 200)  # grass seed and fluff on the wind
 TRACK = (70, 90, 140)  # the blue shadow of a footprint in the snow
 MOON_DAYS = 29.5  # from full moon to full moon
+GOLDEN_LIGHT = (1.9, 0.95, 0.35)
+GOLDEN_HAZE = (255, 140, 40)
+BLUE_HAZE = (25, 50, 160)
+NIGHT_HAZE = (10, 25, 90)  # light multipliers for red, green and blue
+BLUE_LIGHT = (0.55, 0.7, 1.4)
+NIGHT_LIGHT = (0.5, 0.62, 1.1)
 RAINBOW = [(255, 0, 0), (255, 120, 0), (255, 230, 0), (0, 200, 0), (0, 90, 255), (140, 0, 220)]
-SUN_SWEEP = 0.012  # part of a day between sunrise on the left and on the right column
+SUN_SWEEP = 0.003  # part of a day between sunrise on one column and the next: a short sweep, one mood
 # Flowers, mushrooms and fruit: off for now to keep the landscape calm (turn on with "plants": true)
 PLANTS = settings.get("plants", False)
+
+# How the world is shown: the land softened into light and kept a little in the background,
+# life glowing softly and leaving a brief trail where it moves
+LOOK = {"blur": 0.45, "desaturate": 0.15, "land": 0.85, "glow": 0.12, "trail": 0.75}
 
 CELLS = [(x, y) for y in range(H) for x in range(W)]  # row by row, like the LEDs
 
 
 def mix(c1, c2, t):
-    return tuple(int(a + (b - a) * t) for a, b in zip(c1, c2))
+    return (int(c1[0] + (c2[0] - c1[0]) * t), int(c1[1] + (c2[1] - c1[1]) * t), int(c1[2] + (c2[2] - c1[2]) * t))
+
+
+def clamp(v):
+    return 0 if v < 0 else (255 if v > 255 else int(v))
 
 
 def scale(c, f):
-    return tuple(max(0, min(255, int(v * f))) for v in c)
+    return clamp(c[0] * f), clamp(c[1] * f), clamp(c[2] * f)
 
 
 def add(c1, c2, f):
     """Light of its own adds to what is already there."""
-    return tuple(min(255, int(a + b * f)) for a, b in zip(c1, c2))
+    return clamp(c1[0] + c2[0] * f), clamp(c1[1] + c2[1] * f), clamp(c1[2] + c2[2] * f)
 
 
 def blend(canvas, fx, fy, color, alpha, glow=False):
@@ -160,6 +175,9 @@ def per_year(amount):
 def neighbors(x, y):
     return [(x + dx, y + dy) for dx, dy in ((0, -1), (-1, 0), (1, 0), (0, 1))
             if 0 <= x + dx < W and 0 <= y + dy < H]
+
+
+NEIGHBOR_INDEX = [[ny * W + nx for nx, ny in neighbors(x, y)] for x, y in CELLS]
 
 
 def distance(a, b):
@@ -339,6 +357,8 @@ class World:
         self.motes = []  # snowflakes, seeds, leaves and fireflies drifting about
         self.moon_start = random.uniform(0, MOON_DAYS)
         self.night_floor = 0.45
+        self.trail = {}  # cell -> light that moving animals left behind
+        self.column_tint = None  # the light over each column, worked out once per frame
         self.mist = 0.0  # mist over the water after a cold clear night
         self.animals = []
         self.weather = "clear"
@@ -401,14 +421,18 @@ class World:
         longest at the start of summer, shortest at the start of winter."""
         return 0.5 + 0.17 * math.cos(2 * math.pi * (self.year_phase() - 0.25))
 
-    def light(self, x=3.5):
-        """Height of the sun, 0 (down) to 1. The sun reaches the left side first."""
+    def sun_height(self, x=3.5):
+        """Height of the sun, -1 (deepest night) to 1. The sun reaches the left side first."""
         t = ((self.tick % TICKS_PER_DAY) / TICKS_PER_DAY + (3.5 - x) * SUN_SWEEP) % 1.0
         length = self.day_length()
         sunrise = 0.5 - length / 2
-        if not sunrise < t < sunrise + length:
-            return 0.0
-        return math.sin(math.pi * (t - sunrise) / length)
+        if sunrise < t < sunrise + length:
+            return math.sin(math.pi * (t - sunrise) / length)
+        return -math.sin(math.pi * ((t - sunrise - length) % 1.0) / (1 - length))
+
+    def light(self, x=3.5):
+        """Daylight, 0 (the sun is down) to 1."""
+        return max(0.0, self.sun_height(x))
 
     def moon(self):
         """How full the moon is, 0 (new) to 1 (full)."""
@@ -446,19 +470,32 @@ class World:
             return 0.0
         return light / 0.15 if light < 0.15 else max(0.0, 1 - (light - 0.15) / 0.35)
 
-    def lit(self, color, x, y, light, sunny):
-        """A color as the sun shows it: darker and cooler at night, warmer at sunrise and sunset.
-        The light tints each color rather than painting over it, so things stay apart in the dusk."""
-        night = 1 - light
-        glow = self.twilight(light) if self.weather != "fog" else 0.0
-        color = (color[0] * (1 - 0.6 * night) * (1 + 1.2 * glow),
-                 color[1] * (1 - 0.45 * night) * (1 + 0.25 * glow),
-                 color[2] * (1 - 0.1 * night) * (1 - 0.5 * glow))
-        if sunny and light > 0:
-            color = scale(color, 1 - self.cloud_shade(x, y) * light)
-        # At night only the moon lights the land: you see a little more under a full moon
+    def light_color(self, height, sunny):
+        """The color and strength of the light itself: white at midday, golden as the sun gets
+        low, deep blue just after sunset (the blue hour), and dark blue, silver under the moon,
+        at night. Under clouds the colors are weaker."""
+        clear = 1.0 if sunny else 0.35
         floor = self.night_floor
-        return scale(color, floor + (1 - floor) * light)
+        if height > 0:
+            gold = self.twilight(height) * clear
+            tint = tuple(1 + (g - 1) * gold for g in GOLDEN_LIGHT)
+            # Daylight stays strong until the sun is quite low
+            return tint, floor + (1 - floor) * math.sqrt(height), GOLDEN_HAZE, 0.5 * gold
+        blue = max(0.0, 1 + height / 0.35) * clear  # the sky still glows for a while
+        tint = tuple(n + (b - n) * blue for n, b in zip(NIGHT_LIGHT, BLUE_LIGHT))
+        # Night is a deep blue; the moon's light comes through the floor (it shows more color)
+        return tint, floor + 0.2 * blue, mix(NIGHT_HAZE, BLUE_HAZE, blue), 0.4 + 0.15 * blue
+
+    def lit(self, color, x, y, light, sunny):
+        """A color as the light shows it. The light tints each color rather than painting over
+        it, so things stay apart in the dusk."""
+        tint, strength, haze, amount = self.column_tint[x] if self.column_tint else self.light_color(light, sunny)
+        # The air itself is colored by low light: everything is seen through a golden or blue haze
+        own, air = strength * (1 - amount), strength * amount
+        f = 1 - self.cloud_shade(x, y) * light if sunny and light > 0 else 1.0
+        return (clamp((color[0] * tint[0] * own + haze[0] * air) * f),
+                clamp((color[1] * tint[1] * own + haze[1] * air) * f),
+                clamp((color[2] * tint[2] * own + haze[2] * air) * f))
 
     def is_night(self):
         return self.light() < 0.15
@@ -1045,10 +1082,14 @@ class World:
         return shade
 
     def render(self, frame):
-        column_light = [self.light(x) for x in range(W)]
+        column_sun = [self.sun_height(x) for x in range(W)]
+        column_light = [max(0.0, h) for h in column_sun]
+        sunny_now = self.weather in ("clear", "drought")
+        self.column_tint = None
         light = self.light()
         moon = self.moonlight()
         self.night_floor = 0.22 + 0.23 * moon  # a dark night, a bit lighter under a full moon
+        self.column_tint = [self.light_color(h, sunny_now) for h in column_sun]
         speed = self.wind_speed()
         dx, dy = math.cos(self.wind), math.sin(self.wind)
         for cloud in self.clouds:
@@ -1138,6 +1179,7 @@ class World:
                     mist = self.lit(MIST, x, y, col_light, False)
                     color = mix(color, mist, self.mist * drift * (0.8 if pos in self.water else 0.4))
             canvas.append(color)
+        canvas = self.style_land(canvas)
 
         # Animals glide from one cell to the next; asleep they breathe slowly.
         # They give no light of their own: the same light falls on them
@@ -1151,9 +1193,18 @@ class World:
             color = self.lit(scale(RABBIT if animal.kind == "rabbit" else FOX, f), x, y, column_light[x], sunny)
             if animal.moved == self.tick and glide < 1:
                 px, py = animal.prev
-                blend(canvas, px + (x - px) * glide, py + (y - py) * glide, color, 1.0)
+                fx, fy = px + (x - px) * glide, py + (y - py) * glide
+                blend(canvas, fx, fy, color, 1.0)
             else:
+                fx, fy = x, y
                 canvas[y * W + x] = color
+            if LOOK["glow"]:
+                for nx, ny in neighbors(x, y):
+                    i = ny * W + nx
+                    canvas[i] = add(canvas[i], color, LOOK["glow"])
+            if LOOK["trail"] and animal.moved == self.tick:
+                i = int(round(fy)) * W + int(round(fx))
+                self.trail[i] = add(self.trail.get(i, (0, 0, 0)), color, 0.25)
 
         for pos in list(self.flashes):
             color, left = self.flashes[pos]
@@ -1172,10 +1223,40 @@ class World:
             effect.draw(canvas, self)
         self.effects = [e for e in self.effects if not e.done]
 
+        if LOOK["trail"]:
+            # What moved a moment ago still lingers, like a long exposure
+            for i, light in list(self.trail.items()):
+                canvas[i] = add(canvas[i], light, 1.0)
+                light = scale(light, LOOK["trail"])
+                if max(light) < 2:
+                    del self.trail[i]
+                else:
+                    self.trail[i] = light
+
         if self.lightning:
             self.lightning -= 1
             canvas = [mix(c, (255, 255, 255), 0.8) for c in canvas]
         return canvas
+
+    def style_land(self, canvas):
+        """Turn the land from tiles into light: blend each cell into its neighbors, pull all
+        colors into one mood (cool shadows, warm light) and keep it in the background."""
+        keep, spread = 1 - LOOK["blur"], LOOK["blur"]
+        grey_part, land = LOOK["desaturate"], LOOK["land"]
+        result = []
+        for i, (r, g, b) in enumerate(canvas):
+            if spread:
+                around = NEIGHBOR_INDEX[i]
+                share = spread / len(around)
+                r, g, b = r * keep, g * keep, b * keep
+                for j in around:
+                    c = canvas[j]
+                    r, g, b = r + c[0] * share, g + c[1] * share, b + c[2] * share
+            grey = (r + g + b) / 3 * grey_part
+            f = land * (1 - grey_part)
+            result.append((min(255, int(r * f + grey * land)), min(255, int(g * f + grey * land)),
+                           min(255, int(b * f + grey * land))))
+        return result
 
     def reflect(self, color, x, y, light, frame, moon, sunny):
         """Still water mirrors the sky: the glow of a sunset, the stars and the moon at night."""
