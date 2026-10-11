@@ -30,6 +30,15 @@ rescued: whatever disappears can come back, but only when the conditions allow i
   glints on the water, mist rises from it after a cold clear night, and frost makes
   the grass sparkle at dawn. Wind ripples through the grass and on sunny days cloud
   shadows drift across the land.
+- Nights are dark, lighter under a full moon; the moon waxes and wanes over a month,
+  and foxes hunt best by its light. Still water mirrors the sky: a sunset glow, stars,
+  the moon. A low sun brings out the hills, and hollows stay moist and darker green.
+- What the wind carries can be seen: snowflakes drift down, seed fluff blows off the
+  lush grass and starts new grass where it lands on bare ground, autumn leaves blow
+  from the trees and feed the soil. On warm summer nights fireflies wander over the
+  grass. Animals tread down the grass where they walk, so paths appear, and leave
+  footprints in the snow until fresh snow fills them. A fallen tree lies rotting for
+  half a year, and on damp nights its wood glows faintly with foxfire.
 """
 
 import os
@@ -87,7 +96,8 @@ BURROW = (70, 35, 10)
 RABBIT = (150, 130, 100)  # grey-brown like a wild rabbit; pure white outshines everything on real LEDs
 FOX = (145, 45, 10)  # rust brown, steady; fire is bright and flickers
 RAIN = (90, 140, 255)
-SNOW = (225, 232, 250)
+SNOW = (160, 172, 200)  # a snow blanket, soft blue-white; full white would outshine everything
+FLAKE = (240, 245, 255)  # falling snow catches the light
 FLOWERS = [(255, 70, 190), (190, 110, 255), (255, 200, 60)]
 FIREFLY = (200, 255, 60)
 WOOD_FLOWERS = [(240, 240, 255), (150, 120, 255), (255, 230, 90)]  # anemones, bluebells, celandine
@@ -98,6 +108,13 @@ MOONLIGHT = (120, 140, 190)
 MUSHROOM = (230, 40, 30)
 LOCUST = (190, 210, 40)
 BIRD = (215, 215, 225)
+DEADWOOD = (80, 52, 28)
+FOXFIRE = (40, 210, 120)  # the faint green glow of fungi in rotting wood
+STARLIGHT = (170, 180, 230)
+SKY_GLOW = (255, 120, 60)  # a sunset sky mirrored in the water
+SEED = (235, 230, 200)  # grass seed and fluff on the wind
+TRACK = (70, 90, 140)  # the blue shadow of a footprint in the snow
+MOON_DAYS = 29.5  # from full moon to full moon
 RAINBOW = [(255, 0, 0), (255, 120, 0), (255, 230, 0), (0, 200, 0), (0, 90, 255), (140, 0, 220)]
 SUN_SWEEP = 0.012  # part of a day between sunrise on the left and on the right column
 # Flowers, mushrooms and fruit: off for now to keep the landscape calm (turn on with "plants": true)
@@ -112,6 +129,23 @@ def mix(c1, c2, t):
 
 def scale(c, f):
     return tuple(max(0, min(255, int(v * f))) for v in c)
+
+
+def add(c1, c2, f):
+    """Light of its own adds to what is already there."""
+    return tuple(min(255, int(a + b * f)) for a, b in zip(c1, c2))
+
+
+def blend(canvas, fx, fy, color, alpha, glow=False):
+    """Draw something that sits between cells: its light spreads over the cells around it,
+    so it glides instead of jumping from cell to cell."""
+    x0, y0 = math.floor(fx), math.floor(fy)
+    tx, ty = fx - x0, fy - y0
+    for x, y, w in ((x0, y0, (1 - tx) * (1 - ty)), (x0 + 1, y0, tx * (1 - ty)),
+                    (x0, y0 + 1, (1 - tx) * ty), (x0 + 1, y0 + 1, tx * ty)):
+        if w > 0.01 and 0 <= x < W and 0 <= y < H:
+            i = y * W + x
+            canvas[i] = add(canvas[i], color, alpha * w) if glow else mix(canvas[i], color, alpha * w)
 
 
 def per_day(amount):
@@ -147,6 +181,9 @@ class Animal:
         self.rest_until = 0  # a resting animal stays down for a while, it doesn't doze on and off
         self.alert_until = 0  # after a scare, a rabbit stays awake and watchful for a while
         self.leaving = False  # on its way out of this piece of land
+        self.prev = pos  # where it came from, to glide over instead of jumping
+        self.moved = -1  # tick it last moved
+        self.breath = random.uniform(0, 2 * math.pi)  # a sleeping animal breathes at its own pace
         # A body can only store so much, young need time to grow up before they breed: a rabbit
         # a few months, a fox most of a year. Rabbits can have a litter every month or so,
         # foxes have one a year
@@ -159,6 +196,22 @@ class Animal:
 
     def is_adult(self):
         return self.age > self.adult_age
+
+
+class Mote:
+    """Something small drifting over the land: a snowflake, a seed, a leaf, a firefly."""
+
+    def __init__(self, kind, x, y, vx, vy, color, frames):
+        self.kind = kind
+        self.x, self.y = x, y
+        self.vx, self.vy = vx, vy
+        self.color = color
+        self.frame = 0
+        self.frames = frames
+        self.phase = random.uniform(0, 2 * math.pi)
+
+    def fade(self):
+        return min(1.0, self.frame / 6, (self.frames - self.frame) / 8)
 
 
 class Effect:
@@ -281,6 +334,11 @@ class World:
         self.wood_flowers = {}  # pos -> (color, ticks left), spring flowers under trees
         self.fruit = {}  # pos -> ticks left, fallen autumn fruit under trees
         self.frost = 0.0  # rime on the grass after a freezing clear night
+        self.tracks = {}  # pos -> ticks left; footprints in the snow
+        self.deadwood = {}  # pos -> ticks left; a fallen tree rotting away
+        self.motes = []  # snowflakes, seeds, leaves and fireflies drifting about
+        self.moon_start = random.uniform(0, MOON_DAYS)
+        self.night_floor = 0.45
         self.mist = 0.0  # mist over the water after a cold clear night
         self.animals = []
         self.weather = "clear"
@@ -352,6 +410,32 @@ class World:
             return 0.0
         return math.sin(math.pi * (t - sunrise) / length)
 
+    def moon(self):
+        """How full the moon is, 0 (new) to 1 (full)."""
+        days = self.tick / TICKS_PER_DAY + self.moon_start
+        return 0.5 - 0.5 * math.cos(2 * math.pi * days / MOON_DAYS)
+
+    def moonlight(self):
+        """How much moonlight reaches the land: a full moon on a clear night, little behind clouds."""
+        if self.light() > 0:
+            return 0.0
+        return self.moon() * {"clear": 1.0, "drought": 1.0, "fog": 0.3, "rain": 0.15, "storm": 0.1}[self.weather]
+
+    def sun_direction(self):
+        """Where the sun stands, seen from the land: on the left in the morning, low in the
+        south (the bottom) at noon, on the right in the evening."""
+        t = (self.tick % TICKS_PER_DAY) / TICKS_PER_DAY
+        length = self.day_length()
+        progress = min(1.0, max(0.0, (t - (0.5 - length / 2)) / length))
+        return -math.cos(math.pi * progress), math.sin(math.pi * progress)
+
+    def relief(self, x, y, sun):
+        """Slopes facing the sun catch more light than slopes facing away, most when it is low."""
+        h = self.height
+        gx = h[(min(x + 1, W - 1), y)] - h[(max(x - 1, 0), y)]
+        gy = h[(x, min(y + 1, H - 1))] - h[(x, max(y - 1, 0))]
+        return max(0.6, min(1.4, 1 - 1.6 * (gx * sun[0] + gy * sun[1])))
+
     def morning(self):
         return (self.tick % TICKS_PER_DAY) / TICKS_PER_DAY < 0.5
 
@@ -372,7 +456,9 @@ class World:
                  color[2] * (1 - 0.1 * night) * (1 - 0.5 * glow))
         if sunny and light > 0:
             color = scale(color, 1 - self.cloud_shade(x, y) * light)
-        return scale(color, 0.45 + 0.55 * light)
+        # At night only the moon lights the land: you see a little more under a full moon
+        floor = self.night_floor
+        return scale(color, floor + (1 - floor) * light)
 
     def is_night(self):
         return self.light() < 0.15
@@ -419,6 +505,16 @@ class World:
 
     def count(self, kind):
         return sum(1 for a in self.animals if a.kind == kind)
+
+    def move(self, animal, pos):
+        """An animal steps to a new cell: it treads down the grass a little (where animals keep
+        walking, paths appear) and leaves footprints in the snow."""
+        if pos == animal.pos:
+            return
+        if self.snow > 0.3:
+            self.tracks[animal.pos] = TICKS_PER_DAY // 2
+        self.grass[pos] = max(0.0, self.grass[pos] - 0.02)
+        animal.prev, animal.pos, animal.moved = animal.pos, pos, self.tick
 
     def kill(self, animal, color):
         if animal in self.animals:
@@ -546,6 +642,15 @@ class World:
 
     def update_land(self):
         """The ground itself changes: ponds silt up, rain washes soil downhill."""
+        snowing = self.weather in ("rain", "storm") and self.temperature() < 1
+        for pos in list(self.tracks):
+            self.tracks[pos] -= 8 if snowing else 1  # fresh snow fills footprints fast
+            if self.tracks[pos] <= 0 or self.snow < 0.3:
+                del self.tracks[pos]
+        for pos in list(self.deadwood):
+            self.deadwood[pos] -= 1
+            if self.deadwood[pos] <= 0:
+                del self.deadwood[pos]
         for pos in self.water:
             self.height[pos] += per_year(0.23)  # silt and plants slowly fill the pond
         if self.weather in ("rain", "storm"):
@@ -578,11 +683,12 @@ class World:
         self.wood_flowers.pop(pos, None)
         self.fruit.pop(pos, None)
         self.fire.pop(pos, None)
+        self.deadwood.pop(pos, None)
         animal = self.occupant(pos)
         if animal:
             dry = [n for n in neighbors(*pos) if n not in self.water and not self.occupant(n)]
             if dry:
-                animal.pos = random.choice(dry)
+                self.move(animal, random.choice(dry))
             else:
                 self.kill(animal, RAIN)
 
@@ -629,6 +735,7 @@ class World:
     def spread_fire(self):
         for pos in list(self.fire):
             self.grass[pos] = 0.0
+            self.deadwood.pop(pos, None)
             if pos in self.trees:
                 del self.trees[pos]
                 print("Event: a tree burns down")
@@ -636,7 +743,7 @@ class World:
             if victim:
                 self.kill(victim, (255, 200, 0))
             for n in neighbors(*pos):
-                fuel = (1.0 if n in self.trees else self.grass[n]) * (1 - self.snow)
+                fuel = (1.0 if n in self.trees or n in self.deadwood else self.grass[n]) * (1 - self.snow)
                 if n not in self.fire and n not in self.water and random.random() < 0.08 * (1 + 2 * self.dryness) * fuel:
                     self.fire[n] = 12 if n in self.trees else 8
             self.fire[pos] -= 1
@@ -665,6 +772,7 @@ class World:
                 del self.trees[pos]
                 self.grass[pos] = 0.3
                 self.fertile[pos] = TICKS_PER_DAY * 4
+                self.deadwood[pos] = TICKS_PER_YEAR // 2  # the trunk stays and slowly rots away
                 self.height[pos] -= 0.12
                 mound = random.choice(neighbors(*pos))
                 self.height[mound] += 0.08
@@ -714,7 +822,7 @@ class World:
                     s += 0.6 * min(distance(pos, f.pos) for f in foxes)  # away from foxes
                 return s
 
-            rabbit.pos = max(options, key=score)
+            self.move(rabbit, max(options, key=score))
 
         # Snow hides the grass; in a burrow or asleep a rabbit uses little energy
         if rabbit.pos not in self.water and not rabbit.asleep and rabbit.energy < self.capacity(rabbit) - 0.1:
@@ -804,12 +912,13 @@ class World:
             other = self.occupant(target)
             if other and other.kind == "rabbit" and not full and not fox.leaving:
                 hidden = target in self.trees and not night  # cover under the trees
-                if not hidden and random.random() < (0.45 if night else 0.2):
+                # A fox sees best by the light of the full moon
+                if not hidden and random.random() < ((0.35 + 0.2 * self.moon()) if night else 0.2):
                     self.kill(other, (255, 0, 0))
                     fox.energy += 1.0
-                    fox.pos = target
+                    self.move(fox, target)
             elif not other and target not in self.water:
-                fox.pos = target
+                self.move(fox, target)
             fox.energy -= per_day(1.15) if self.temperature() < 0 else per_day(0.86)
 
         fox.energy = min(fox.energy, self.capacity(fox))
@@ -880,7 +989,8 @@ class World:
         if PLANTS and self.weather == "rain" and 5 < temperature < 16:
             for pos in CELLS:
                 if (pos not in self.water and pos not in self.trees and pos not in self.mushrooms
-                        and any(n in self.trees for n in neighbors(*pos)) and random.random() < per_day(0.72)):
+                        and (pos in self.deadwood or any(n in self.trees for n in neighbors(*pos)))
+                        and random.random() < per_day(0.72)):
                     self.mushrooms[pos] = int(TICKS_PER_DAY * random.uniform(0.5, 1.0))
         for pos in list(self.mushrooms):
             self.mushrooms[pos] -= 1
@@ -936,6 +1046,9 @@ class World:
 
     def render(self, frame):
         column_light = [self.light(x) for x in range(W)]
+        light = self.light()
+        moon = self.moonlight()
+        self.night_floor = 0.22 + 0.23 * moon  # a dark night, a bit lighter under a full moon
         speed = self.wind_speed()
         dx, dy = math.cos(self.wind), math.sin(self.wind)
         for cloud in self.clouds:
@@ -947,14 +1060,19 @@ class World:
                 cloud[1] = H / 2 - dy * (H / 2 + 3) + random.uniform(-2, 2)
                 cloud[2] = random.uniform(1.5, 3)
         sunny = self.weather in ("clear", "drought")
+        clear_night = light == 0 and sunny
         temperature = self.temperature()
         raining = self.weather in ("rain", "storm") and temperature >= 1
         grass_color = self.seasonal(SEASON_GRASS)
         tree_color = self.seasonal(SEASON_TREE)
+        sun = self.sun_direction()
+        # Low sun on a clear day brings out the hills: strongest in the morning and evening
+        relief = min(1.0, 4 * light) * (1.1 - light) if sunny and light > 0 else 0.0
+        damp = self.weather in ("rain", "fog", "clear") and temperature > 4 and self.snow < 0.3
         canvas = []
         for pos in CELLS:
             x, y = pos
-            light = column_light[x]
+            col_light = column_light[x]
             if pos in self.fire:
                 color = mix((255, 30, 0), (255, 220, 60), random.random() ** 0.7)
             elif pos in self.water:
@@ -980,48 +1098,62 @@ class World:
                 color = mix(mix(SOIL, grass_color, self.grass[pos]), tint, amount)
             else:
                 bare = MUD if pos in self.mud else (ASH if self.grass[pos] < 0.02 else SOIL)
-                color = mix(mix(bare, grass_color, self.grass[pos]), SNOW, self.snow)
+                # Hollows stay moist and their grass grows dense and dark; on the hilltops it is thinner
+                ground = scale(grass_color, 0.75 + 0.4 * self.height[pos])
+                color = mix(bare, ground, self.grass[pos])
+                if pos in self.deadwood:
+                    color = mix(color, DEADWOOD, 0.5 * min(1.0, self.deadwood[pos] / (TICKS_PER_YEAR / 8)))
+                color = mix(color, SNOW, self.snow)
+                if pos in self.tracks:
+                    color = mix(color, TRACK, 0.6 * min(1.0, self.tracks[pos] / (TICKS_PER_DAY / 8)))
                 color = mix(color, FROST, 0.6 * self.frost)
                 # Wind ripples through tall grass
                 if self.grass[pos] > 0.3 and self.snow < 0.5:
                     wave = math.sin((x * dx + y * dy) * 1.3 - frame * 0.08 * speed)
                     color = scale(color, 1 + 0.12 * min(1.0, speed) * self.grass[pos] * wave)
-                sparkle = self.snow > 0.3 or (self.frost > 0.3 and light > 0)
+                sparkle = (self.snow > 0.3 or self.frost > 0.3) and (col_light > 0 or moon > 0.4)
                 if sparkle and random.random() < 0.01:
-                    color = (255, 255, 255)  # glittering snow or rime
+                    color = (255, 255, 255)  # glittering snow or rime, in the sun or the moonlight
+            if relief and pos not in self.water and pos not in self.fire:
+                color = scale(color, 1 + (self.relief(x, y, sun) - 1) * relief)
 
             if self.weather == "drought" and pos not in self.water:
                 color = mix(color, (120, 90, 20), 0.35)
             if self.weather == "fog":
                 color = mix(color, (70, 70, 75), 0.45)
 
-            # Fire gives light of its own, everything else is lit by the sun
+            # Fire gives light of its own, everything else is lit by the sun or the moon
             if pos not in self.fire:
-                color = self.lit(color, x, y, light, sunny)
-                if pos in self.water and light == 0 and self.weather == "clear" and self.ice < 0.5:
-                    glint = max(0.0, math.sin(frame * 0.07 + x * 0.9 - y * 0.6)) ** 6
-                    color = mix(color, MOONLIGHT, 0.5 * glint)  # moonlight on the water
+                color = self.lit(color, x, y, col_light, sunny)
+                if clear_night and moon > 0.2:
+                    color = scale(color, 1 - 0.6 * self.cloud_shade(x, y))  # clouds drift past the moon
+                if pos in self.water and self.ice < 0.5:
+                    color = self.reflect(color, x, y, col_light, frame, moon, sunny)
+                if pos in self.deadwood and col_light == 0 and damp:
+                    # Foxfire: fungi in the wet rotting wood glow faintly in the dark
+                    pulse = 0.7 + 0.3 * math.sin(frame * 0.02 + x * 1.7 + y)
+                    color = add(color, FOXFIRE, 0.22 * pulse * min(1.0, self.deadwood[pos] / (TICKS_PER_YEAR / 8)))
                 if self.mist > 0.05 and (pos in self.water or any(n in self.water for n in neighbors(*pos))):
                     drift = 0.6 + 0.4 * math.sin(frame * 0.05 + x * 0.8 + y * 0.5)
-                    color = mix(color, MIST, self.mist * drift * (0.8 if pos in self.water else 0.4))
+                    mist = self.lit(MIST, x, y, col_light, False)
+                    color = mix(color, mist, self.mist * drift * (0.8 if pos in self.water else 0.4))
             canvas.append(color)
 
-        light = self.light()
-
-        # Fireflies on warm nights
-        if self.is_night() and temperature > 15 and self.weather == "clear" and random.random() < 0.2:
-            x, y = random.randrange(W), random.randrange(H)
-            if (x, y) not in self.water:
-                canvas[y * W + x] = scale(FIREFLY, 0.7)
-
-        # Animals and what happens to them give no light of their own: the same light falls on them
+        # Animals glide from one cell to the next; asleep they breathe slowly.
+        # They give no light of their own: the same light falls on them
+        glide = (frame % FRAMES_PER_TICK + 1) / FRAMES_PER_TICK
         for animal in self.animals:
             x, y = animal.pos
-            f = 0.6 if animal.asleep else 1.0
-            if animal.flash:
-                f *= 1.15  # a newborn is a little brighter for a moment
-            color = scale(RABBIT if animal.kind == "rabbit" else FOX, f)
-            canvas[y * W + x] = self.lit(color, x, y, column_light[x], sunny)
+            if animal.asleep:
+                f = 0.55 + 0.1 * math.sin(frame * 0.12 + animal.breath)
+            else:
+                f = 1.15 if animal.flash else 1.0  # a newborn is a little brighter for a moment
+            color = self.lit(scale(RABBIT if animal.kind == "rabbit" else FOX, f), x, y, column_light[x], sunny)
+            if animal.moved == self.tick and glide < 1:
+                px, py = animal.prev
+                blend(canvas, px + (x - px) * glide, py + (y - py) * glide, color, 1.0)
+            else:
+                canvas[y * W + x] = color
 
         for pos in list(self.flashes):
             color, left = self.flashes[pos]
@@ -1033,7 +1165,8 @@ class World:
             else:
                 self.flashes[pos] = (color, left - 1)
 
-        self.render_precipitation(canvas, temperature)
+        self.update_motes(canvas, frame, column_light, temperature, tree_color, sunny)
+        self.render_precipitation(canvas, temperature, column_light, sunny)
 
         for effect in self.effects:
             effect.draw(canvas, self)
@@ -1044,15 +1177,104 @@ class World:
             canvas = [mix(c, (255, 255, 255), 0.8) for c in canvas]
         return canvas
 
-    def render_precipitation(self, canvas, temperature):
-        if self.weather in ("rain", "storm"):
+    def reflect(self, color, x, y, light, frame, moon, sunny):
+        """Still water mirrors the sky: the glow of a sunset, the stars and the moon at night."""
+        if not sunny:
+            return color
+        glow = self.twilight(light)
+        if glow:
+            color = mix(color, scale(SKY_GLOW, 0.5 + 0.5 * light), 0.45 * glow)
+        if light == 0:
+            # The moon washes out the fainter stars
+            if random.random() < 0.025 * (1 - 0.6 * moon):
+                color = mix(color, STARLIGHT, 0.5)
+            glint = max(0.0, math.sin(frame * 0.07 + x * 0.9 - y * 0.6)) ** 6
+            color = mix(color, MOONLIGHT, 0.7 * glint * moon)
+        return color
+
+    def update_motes(self, canvas, frame, column_light, temperature, tree_color, sunny):
+        """Snowflakes, seeds, leaves and fireflies: each drifts on the wind and lands for real."""
+        speed = self.wind_speed()
+        dx, dy = math.cos(self.wind), math.sin(self.wind)
+        light = self.light()
+        season = self.season()
+        snowing = self.weather in ("rain", "storm") and temperature < 1
+
+        # Snow comes down slowly, swaying, carried a little by the wind
+        if snowing and random.random() < (0.7 if self.weather == "storm" else 0.4):
+            self.motes.append(Mote("flake", random.uniform(-1, W), -0.5, dx * speed * 0.02,
+                                   random.uniform(0.05, 0.09), FLAKE, random.randint(60, 110)))
+        # Late spring and summer: lush grass sets seed and the wind takes the fluff
+        lush = sum(1 for g in self.grass.values() if g > 0.8)
+        if (season in ("spring", "summer") and self.year_phase() > 0.15 and sunny and light > 0.3
+                and temperature > 12 and random.random() < 0.0006 * lush * speed):
+            x, y = random.choice([p for p, g in self.grass.items() if g > 0.8])
+            self.motes.append(Mote("seed", x, y, dx * speed * 0.05, dy * speed * 0.05, SEED, random.randint(30, 90)))
+        # Autumn wind takes the leaves from the trees
+        if season == "autumn" and self.trees and random.random() < min(0.2, 0.01 * len(self.trees) * speed):
+            x, y = random.choice(list(self.trees))
+            self.motes.append(Mote("leaf", x, y, dx * speed * 0.04, dy * speed * 0.04,
+                                   mix(tree_color, (230, 150, 20), random.random()), random.randint(20, 60)))
+        # Fireflies on warm summer nights, over the grass and along the woods and water
+        fireflies = sum(1 for m in self.motes if m.kind == "firefly")
+        wanted = 0
+        if light == 0 and sunny and season == "summer":
+            wanted = int(min(6, max(0, temperature - 14)) * min(1.0, lush / 20))
+        if fireflies < wanted and random.random() < 0.02:
+            x, y = random.choice([p for p, g in self.grass.items() if g > 0.8])
+            self.motes.append(Mote("firefly", x, y, 0.0, 0.0, FIREFLY, FPS * random.randint(60, 240)))
+
+        for mote in self.motes:
+            mote.frame += 1
+            if mote.kind == "flake":
+                mote.x += mote.vx + 0.02 * math.sin(mote.frame * 0.15 + mote.phase)
+                mote.y += mote.vy
+            elif mote.kind == "firefly":
+                # A slow wandering flight; it flashes for a moment every few seconds
+                mote.vx = max(-0.03, min(0.03, mote.vx + random.gauss(0, 0.004)))
+                mote.vy = max(-0.03, min(0.03, mote.vy + random.gauss(0, 0.004)))
+                mote.x = min(W - 1.0, max(0.0, mote.x + mote.vx))
+                mote.y = min(H - 1.0, max(0.0, mote.y + mote.vy))
+                if light > 0 or fireflies > wanted:
+                    mote.frames = min(mote.frames, mote.frame + 8)  # the night is over
+            else:
+                mote.x += mote.vx + random.uniform(-0.03, 0.03)
+                mote.y += mote.vy + random.uniform(-0.03, 0.03)
+
+            fade = mote.fade()
+            if mote.kind == "firefly":
+                flash = (math.sin(mote.frame * 0.13 + mote.phase) - 0.7) / 0.3
+                if flash > 0:
+                    blend(canvas, mote.x, mote.y, mote.color, 0.9 * flash * fade, glow=True)
+            else:
+                x = min(W - 1, max(0, int(mote.x)))
+                color = self.lit(mote.color, x, 0, column_light[x], sunny)
+                blend(canvas, mote.x, mote.y, color, 0.75 * fade)
+
+        for mote in self.motes:
+            if mote.frame >= mote.frames:
+                self.settle(mote)
+        self.motes = [m for m in self.motes
+                      if m.frame < m.frames and -2 < m.x < W + 1 and -2 < m.y < H + 1]
+
+    def settle(self, mote):
+        """Where a seed comes down on bare ground, grass starts; fallen leaves feed the soil."""
+        pos = (int(round(mote.x)), int(round(mote.y)))
+        if pos not in self.grass or pos in self.water:
+            return
+        if mote.kind == "seed" and self.grass[pos] < 0.5:
+            self.grass[pos] += 0.15
+        elif mote.kind == "leaf" and pos not in self.trees:
+            self.fertile[pos] = max(self.fertile.get(pos, 0), TICKS_PER_DAY // 2)
+
+    def render_precipitation(self, canvas, temperature, column_light, sunny):
+        if self.weather in ("rain", "storm") and temperature >= 1:
             for _ in range(2 if self.weather == "storm" else 1):
-                if random.random() < 0.6:
+                if random.random() < 0.4:
                     self.drops.append([random.randrange(W), 0])
-        snowing = temperature < 1
         for drop in self.drops:
             x, y = drop
-            canvas[y * W + x] = mix(canvas[y * W + x], SNOW if snowing else RAIN, 0.7)
+            canvas[y * W + x] = mix(canvas[y * W + x], self.lit(RAIN, x, y, column_light[x], sunny), 0.35)
             drop[1] += 1
         self.drops = [d for d in self.drops if d[1] < H]
 
