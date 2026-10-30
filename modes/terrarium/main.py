@@ -47,9 +47,10 @@ settings = config.get("modes", {}).get("terrarium", {})
 pixels = neopixel.NeoPixel(PIN, LED_COUNT, brightness=BRIGHTNESS, auto_write=False)
 
 W = H = 8
-FPS = 12
-FRAMES_PER_TICK = 3  # the world itself moves 4 times per second
-TICKS_PER_SECOND = FPS // FRAMES_PER_TICK
+FPS = 11  # frames drawn per second: everything in the air and the wind moves at this calm pace
+TICKS_PER_SECOND = 4  # the world itself moves 4 times per second
+FRAMES_PER_TICK = FPS / TICKS_PER_SECOND
+SHOWN_PER_FRAME = 2  # the LEDs show 22 frames a second, fading smoothly from one frame to the next
 DAY_MINUTES = settings.get("day_minutes", 20)
 SEASON_MINUTES = settings.get("season_minutes", 480)
 TICKS_PER_DAY = int(DAY_MINUTES * 60 * TICKS_PER_SECOND)
@@ -118,6 +119,7 @@ RAINBOW = [(255, 0, 0), (255, 120, 0), (255, 230, 0), (0, 200, 0), (0, 90, 255),
 GOLDEN_LIGHT = (1.9, 0.95, 0.35)
 BLUE_LIGHT = (0.55, 0.7, 1.4)
 NIGHT_LIGHT = (0.5, 0.62, 1.1)
+FAR_AIR = (70, 95, 135)  # the blue of distance
 HAZE_GOLD = (255, 140, 40)
 HAZE_BLUE = (25, 50, 160)
 HAZE_NIGHT = (10, 25, 90)
@@ -246,6 +248,7 @@ class World:
 
         # Hills and a hollow, in cells of ground; it slowly changes
         self.ground = self.make_terrain()
+        self.far = self.make_far_land()
         self.volume = random.uniform(0, 2)  # cells of water in the hollow
         self.level = 0.0
         self.ice = 0.0
@@ -276,6 +279,7 @@ class World:
         self.stars = [[random.uniform(0, 2 * W), random.uniform(0, 4.5), random.uniform(0.3, 1.0),
                        random.uniform(0, 2 * math.pi)] for _ in range(16)]
         self.clouds = []
+        self.gusts = []  # [column, strength]: gusts of wind rolling over the land
         self.motes = []
         self.rainbow = 0  # frames left
         self.rainbow_side = 1
@@ -292,6 +296,18 @@ class World:
         heights = [3 + a * math.sin(x * 0.7 + b) + c * math.sin(x * 1.6 + d) for x in range(W)]
         low, high = min(heights), max(heights)
         return [2.0 + 2.4 * (h - low) / (high - low) for h in heights]
+
+    def make_far_land(self):
+        """Hills further away, behind the land: sometimes a smooth ridge, sometimes a wooded edge."""
+        a, b, c = random.uniform(0.3, 0.8), random.uniform(0, 2 * math.pi), random.uniform(0, 2 * math.pi)
+        woods = random.random() < 0.5
+        far = []
+        for x in range(W):
+            h = 4.6 + a * math.sin(x * 0.45 + b) + 0.25 * math.sin(x * 1.3 + c)
+            if woods:
+                h += random.uniform(0.0, 0.5)  # the tops of distant trees
+            far.append(max(self.ground[x] + 0.3, h))
+        return far
 
     # Time and climate
 
@@ -1063,8 +1079,10 @@ class World:
         tint = tuple(n + (b - n) * blue for n, b in zip(NIGHT_LIGHT, BLUE_LIGHT))
         return tint, (floor + 0.2 * blue) * (1 - 0.45 * blue), mix(HAZE_NIGHT, HAZE_BLUE, blue), (0.4 + 0.15 * blue) * (1 - 0.5 * blue)
 
-    def lit(self, color):
+    def lit(self, color, x=None):
         tint, strength, haze, amount = self.light_now
+        if x is not None:
+            strength *= 1 - self.shade[min(W - 1, max(0, int(round(x))))]  # in the shadow of a cloud
         own, air = strength * (1 - amount), strength * amount
         return (clamp(color[0] * tint[0] * own + haze[0] * air), clamp(color[1] * tint[1] * own + haze[1] * air),
                 clamp(color[2] * tint[2] * own + haze[2] * air))
@@ -1075,6 +1093,7 @@ class World:
         sunny = self.weather in ("clear", "drought")
         self.light_now = self.light_color(height, sunny)
         self.underground_light = 0.5 + 0.5 * self.light_now[1]
+        self.shade = [0.0] * W
         temperature = self.temperature()
         season = self.season()
         zenith, horizon = self.sky_colors(height)
@@ -1145,7 +1164,10 @@ class World:
                     if 0 <= band < len(RAINBOW):
                         canvas[y * W + x] = mix(canvas[y * W + x], RAINBOW[band], 0.45 * fade)
 
+        self.draw_far_land(canvas, horizon)
         self.draw_clouds(canvas, frame, light, horizon, overcast)
+        self.shade = self.cloud_shadows(sun, overcast, light)
+        gust = self.caught = self.update_gusts()
         self.draw_birds(canvas, light)
         self.draw_flyers(canvas, frame, height, temperature)
         self.draw_murmuration(canvas, height)
@@ -1180,9 +1202,10 @@ class World:
                         # The crown sways in the wind, more at the top
                         reach = 0.22 * min(2.0, wind) * (1 + 0.4 * (top - 1 - py))
                         sway = reach * math.sin(frame * sway_speed + x * 1.7 + py * 0.4)
-                        blend(canvas, px + sway, py, self.lit(color), alpha)
+                        sway += 0.5 * gust[x] * (1 + 0.4 * (top - 1 - py)) * (1 if self.wind > 0 else -1)  # leaning with a gust
+                        blend(canvas, px + sway, py, self.lit(color, px), alpha)
                     else:
-                        canvas[py * W + px] = mix(canvas[py * W + px], self.lit(color), alpha)
+                        canvas[py * W + px] = mix(canvas[py * W + px], self.lit(color, px), alpha)
 
         sky_row = [mix(horizon, grey, overcast)] * W
         for x in range(W):
@@ -1193,7 +1216,7 @@ class World:
                 surface = H - self.level
                 for y in range(max(0, math.floor(surface)), top):
                     fill = min(1.0, (y + 1) - surface) if y < surface else 1.0
-                    water = self.lit(WATER)
+                    water = self.lit(WATER, x)
                     if self.ice < 0.5:
                         water = mix(water, sky_row[x], 0.35 if y == math.floor(surface) else 0.15)
                         if dark_sky > 0.5 and random.random() < 0.02:
@@ -1210,13 +1233,14 @@ class World:
                         color = mix(SOIL, (40, 30, 20), 0.5)
                     else:
                         color = mix(SOIL, grass_color, self.grass[x])
-                        # Gusts roll through the grass
+                        # The grass ripples in the wind; bent over by a gust it shows its paler side
                         wave = math.sin(x * 1.1 * (1 if self.wind > 0 else -1) - frame * 0.06 * (0.5 + wind))
-                        color = scale(color, 1 + 0.35 * min(1.0, wind) * self.grass[x] * wave * (1 - snow))
+                        stir = 0.15 * min(1.0, wind) * wave + 0.45 * gust[x]
+                        color = scale(color, 1 + self.grass[x] * stir * (1 - snow))
                         color = mix(color, SNOW, snow)
                         if x in self.logs:
                             color = mix(color, LOG, 0.4)
-                    color = self.lit(color)
+                    color = self.lit(color, x)
                 else:
                     # No sunlight reaches under the ground: the cut through it stays the same, only dimmer at night
                     color = mix(SOIL, DEEP_SOIL, min(1.0, depth / 2.5))
@@ -1233,23 +1257,24 @@ class World:
                 wave = math.sin(x * 1.1 * (1 if self.wind > 0 else -1) - frame * 0.06 * (0.5 + wind))
                 tall = (self.grass[x] - 0.5) * 2
                 i = (top - 1) * W + x
-                canvas[i] = mix(canvas[i], self.lit(grass_color), tall * (0.35 + 0.3 * wave * min(1.0, wind)))
+                lying = 1 - 0.7 * gust[x]  # a gust flattens it for a moment
+                canvas[i] = mix(canvas[i], self.lit(grass_color, x), tall * (0.35 + 0.15 * wave * min(1.0, wind)) * lying)
             # Deep snow piles up on the land
             if self.snow > 1.0 and not self.wet(x) and top > 0:
                 i = (top - 1) * W + x
-                canvas[i] = mix(canvas[i], self.lit(SNOW), min(1.0, (self.snow - 1.0) / 0.5))
+                canvas[i] = mix(canvas[i], self.lit(SNOW, x), min(1.0, (self.snow - 1.0) / 0.5))
             # A fallen trunk lies on the ground; on damp nights it glows faintly with foxfire
             if x in self.logs and top > 0:
                 i = (top - 1) * W + x
                 rot = min(1.0, self.logs[x] / (TICKS_PER_YEAR / 8))
-                canvas[i] = mix(canvas[i], self.lit(LOG), 0.8 * rot)
+                canvas[i] = mix(canvas[i], self.lit(LOG, x), 0.8 * rot)
                 if light == 0 and damp:
                     canvas[i] = add(canvas[i], FOXFIRE, 0.3 * rot * (0.7 + 0.3 * math.sin(frame * 0.02 + x)))
             if x in self.fire and top > 0 and random.random() < 0.15:
                 self.motes.append(Mote("smoke", x, top - 1.5, self.wind * 0.02, -0.04, SMOKE, 40))
 
         # Animals: on the land they glide from column to column, in the burrow they sleep and breathe
-        glide = (frame % FRAMES_PER_TICK + 1) / FRAMES_PER_TICK
+        glide = min(1.0, (frame % FRAMES_PER_TICK + 1) / FRAMES_PER_TICK)
         for animal in sorted(self.animals, key=lambda a: a.kind != "mouse"):  # mice first, the rest on top
             color = {"rabbit": RABBIT, "fox": FOX, "mouse": MOUSE}[animal.kind]
             top = self.top(animal.x)
@@ -1260,7 +1285,7 @@ class World:
                 canvas[y * W + animal.x] = scale(color, f * self.underground_light)
                 continue
             f = 0.6 + 0.1 * math.sin(frame * 0.12 + animal.breath) if animal.asleep else 1.0
-            color = self.lit(scale(color, f))
+            color = self.lit(scale(color, f), animal.x)
             fx, fy = animal.x, top - 1
             if animal.moved == self.tick and glide < 1:
                 px, ptop = animal.prev, self.top(animal.prev) - 1
@@ -1291,6 +1316,60 @@ class World:
                 canvas = [add(c, (200, 200, 230), 0.4) for c in canvas]
             self.lightning = (x, left - 1) if left > 1 else None
         return canvas
+
+    def cloud_shadows(self, sun, overcast, light):
+        """How much each column lies in the shadow of a cloud: follow the line from the land
+        to the sun and see how much cloud is in the way."""
+        shade = [0.0] * W
+        if not sun or not self.clouds or overcast > 0.5 or light == 0:
+            return shade
+        depth = 0.55 * min(1.0, light * 4)
+        sx, sy = sun
+        for x in range(W):
+            gx, gy = x, self.top(x) - 1
+            cover = 0.0
+            for k in range(1, 9):
+                t = k / 8
+                px, py = gx + (sx - gx) * t, gy + (sy - gy) * t
+                for cx, cy, r, _ in self.clouds:
+                    d = ((px - cx) / r) ** 2 + ((py - cy) * 1.4) ** 2
+                    if d < 1:
+                        cover = max(cover, 1 - d)
+            shade[x] = depth * min(1.0, cover * 1.3)
+        return shade
+
+    def update_gusts(self):
+        """Gusts of wind roll over the land in the direction of the wind: now and then on a calm
+        day, one after another in a storm. Returns how hard each column is caught right now."""
+        wind = self.wind_strength()
+        if random.random() < 0.002 + 0.009 * wind:
+            start = -1.5 if self.wind > 0 else W + 0.5
+            self.gusts.append([start, random.uniform(0.4, 1.0) * min(1.0, 0.3 + wind / 2.5)])
+        speed = (0.12 + 0.05 * wind) * (1 if self.wind > 0 else -1)
+        caught = [0.0] * W
+        for g in self.gusts:
+            g[0] += speed
+            for x in range(W):
+                caught[x] = min(1.0, caught[x] + g[1] * math.exp(-((x - g[0]) / 1.3) ** 2))
+        self.gusts = [g for g in self.gusts if -3 < g[0] < W + 2]
+        return caught
+
+    def draw_far_land(self, canvas, horizon):
+        """Distant hills, pale with the air between us and them; in rain they fade, in fog and
+        thick mist they are gone. They hide the stars behind them and the sun when it is low."""
+        clear = {"clear": 1.0, "drought": 0.8, "rain": 0.5, "storm": 0.35, "fog": 0.08}[self.weather]
+        clear *= 1 - 0.7 * min(1.0, self.mist * 1.5)
+        if clear < 0.02:
+            return
+        land = mix(self.seasonal(SEASON_GRASS), self.seasonal(SEASON_CROWN), 0.6)
+        land = mix(mix(land, FAR_AIR, 0.3), SNOW, 0.7 * min(1.0, self.snow))
+        color = mix(scale(self.lit(land), 0.8), horizon, 0.2)
+        for x in range(W):
+            ridge = H - self.far[x]
+            for y in range(max(0, math.floor(ridge)), self.top(x)):
+                cover = min(1.0, y + 1 - ridge)
+                i = y * W + x
+                canvas[i] = mix(canvas[i], color, cover * clear)
 
     def draw_murmuration(self, canvas, height):
         """On autumn and winter evenings starlings gather before they roost: a cloud of birds
@@ -1493,7 +1572,7 @@ class World:
 
     def draw_weather(self, canvas, frame, temperature, light, crown, season):
         """Rain, snow, falling leaves, fireflies and smoke, each moving through the air."""
-        if season == "autumn" and self.trees and random.random() < min(0.15, 0.03 * len(self.trees) * (0.5 + abs(self.wind))):
+        if season == "autumn" and self.trees and random.random() < min(0.3, 0.03 * len(self.trees) * (0.5 + abs(self.wind) + 3 * max(self.caught))):
             x = random.choice(list(self.trees))
             if self.trees[x] >= TICKS_PER_YEAR:
                 self.motes.append(Mote("leaf", x, self.top(x) - 3, self.wind * 0.06, 0.05,
@@ -1541,22 +1620,46 @@ class World:
         self.motes = [m for m in self.motes if m.frame < m.frames and -2 < m.x < W + 1 and -2 < m.y < H + 1]
 
 
+# The LEDs only have whole steps, and at a low brightness a dark color has just a few of them:
+# round to the nearest step instead of always down, so dim colors keep their shade.
+STEPS = int(255 * BRIGHTNESS)
+STEP_VALUE = []  # the value to send for each step the LED receives after the library dims it
+for step in range(STEPS + 1):
+    value = int(step / BRIGHTNESS)
+    while value < 255 and int(value * BRIGHTNESS) < step:
+        value += 1
+    STEP_VALUE.append(value)
+
+
 def show(canvas):
     for i, color in enumerate(canvas):
-        pixels[i] = color
+        pixels[i] = [STEP_VALUE[min(STEPS, int(c * BRIGHTNESS + 0.5))] for c in color]
     pixels.show()
 
 
 world = World()
 print(f"Start: {world.season()}, {world.temperature():.0f}°")
 frame = 0
+ticks = 0
+previous = current = world.render(frame)
+due = time.monotonic()
 try:
     while True:
-        if frame % FRAMES_PER_TICK == 0:
+        while ticks <= frame / FRAMES_PER_TICK:
             world.step()
-        show(world.render(frame))
+            ticks += 1
         frame += 1
-        time.sleep(1 / FPS)
+        previous, current = current, world.render(frame)
+        for k in range(1, SHOWN_PER_FRAME + 1):
+            t = k / SHOWN_PER_FRAME
+            show([(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t)
+                  for a, b in zip(previous, current)])
+            due += 1 / (FPS * SHOWN_PER_FRAME)
+            wait = due - time.monotonic()
+            if wait > 0:
+                time.sleep(wait)
+            elif wait < -0.5:
+                due = time.monotonic()  # fell behind: don't rush to catch up
 except KeyboardInterrupt:
     pixels.fill((0, 0, 0))
     pixels.show()
