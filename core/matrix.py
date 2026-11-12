@@ -189,6 +189,13 @@ class Matrix:
             pass
 
     def _shutdown(self):
+        # A second stop signal (systemd and main.py can both send one) would cut the fade-out
+        # short and skip releasing the driver, so ignore further ones while shutting down
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            try:
+                signal.signal(sig, signal.SIG_IGN)
+            except ValueError:
+                pass  # not in the main thread
         self.off()
         try:
             self.pixels.deinit()  # release the LED driver cleanly
