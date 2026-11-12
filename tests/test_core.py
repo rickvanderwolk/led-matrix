@@ -84,6 +84,14 @@ class ScheduleTest(unittest.TestCase):
         conf = {"brightness": 0.2, "schedule": {"25:00": {"brightness": 1}, "x": {"brightness": 1}, "08:00": 1}}
         self.assertEqual(config.active(conf, at("12:00"))["brightness"], 0.2)
 
+    def test_settings_that_are_not_objects_are_ignored(self):
+        conf = {"display": [90], "mode_settings": {"ntfy-sh": "abc", "clock": {"x": 1}}}
+        active = config.active(conf, at("12:00"))
+        self.assertNotIn("display", active)
+        self.assertEqual(active["mode_settings"], {"clock": {"x": 1}})
+        self.assertEqual(conf["mode_settings"]["ntfy-sh"], "abc")
+        self.assertNotIn("mode_settings", config.active({"mode_settings": [1]}, at("12:00")))
+
     def test_schedule_without_times_as_keys_is_ignored(self):
         conf = {"brightness": 0.2, "schedule": [{"from": "08:00", "brightness": 1}]}
         self.assertEqual(config.active(conf, at("12:00"))["brightness"], 0.2)
@@ -127,6 +135,10 @@ class PlaylistTest(unittest.TestCase):
         conf = {"mode": self.MODES, "every": "30m"}
         self.assertEqual(self.mode_at(conf, at("10:00")), self.mode_at(conf, at("10:29")))
         self.assertNotEqual(self.mode_at(conf, at("10:00")), self.mode_at(conf, at("10:30")))
+        ten_seconds = {"mode": self.MODES, "every": "10s"}
+        t = datetime(2026, 3, 1, 10, 0, 0)
+        self.assertEqual(self.mode_at(ten_seconds, t), self.mode_at(ten_seconds, t.replace(second=9)))
+        self.assertNotEqual(self.mode_at(ten_seconds, t), self.mode_at(ten_seconds, t.replace(second=10)))
         two_hours = {"mode": self.MODES, "every": "2h"}
         self.assertEqual(self.mode_at(two_hours, at("10:00")), self.mode_at(two_hours, at("11:59")))
 

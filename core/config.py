@@ -123,6 +123,20 @@ def active(config, now=None):
     elif mode is not None and not isinstance(mode, str):
         warn_once(f"Ignoring invalid mode {mode!r} (use a mode name or a list of mode names)")
         base["mode"] = None
+
+    # Keys that must be objects; drop anything else so modes can rely on .get()
+    for key in ("display", "mode_settings"):
+        if key in base and not isinstance(base[key], dict):
+            warn_once(f"Ignoring invalid {key} {base[key]!r} (use an object, like {{...}})")
+            del base[key]
+    if "mode_settings" in base:
+        settings = {}
+        for name, value in base["mode_settings"].items():
+            if isinstance(value, dict):
+                settings[name] = value
+            else:
+                warn_once(f"Ignoring invalid mode_settings for {name}: {value!r} (use an object, like {{...}})")
+        base["mode_settings"] = settings
     return base
 
 
@@ -147,17 +161,17 @@ def brightness(config):
     return max(0.0, min(1.0, float(value)))
 
 
-def _every_minutes(every):
-    """A playlist interval like "30m" or "2h" in minutes."""
+def _every_seconds(every):
+    """A playlist interval like "30s", "30m" or "2h" in seconds."""
     if every is None:
-        return DEFAULT_PLAYLIST_MINUTES
-    match = re.fullmatch(r"(\d+)([mh])", every) if isinstance(every, str) else None
-    minutes = int(match[1]) * (60 if match[2] == "h" else 1) if match else 0
-    if minutes <= 0:
-        warn_once(f'Ignoring invalid playlist interval {every!r} (use a value like "30m" or "2h"), '
+        return DEFAULT_PLAYLIST_MINUTES * 60
+    match = re.fullmatch(r"(\d+)([smh])", every) if isinstance(every, str) else None
+    seconds = int(match[1]) * {"s": 1, "m": 60, "h": 3600}[match[2]] if match else 0
+    if seconds <= 0:
+        warn_once(f'Ignoring invalid playlist interval {every!r} (use a value like "30s", "30m" or "2h"), '
                   f"using {DEFAULT_PLAYLIST_MINUTES} minutes")
-        return DEFAULT_PLAYLIST_MINUTES
-    return minutes
+        return DEFAULT_PLAYLIST_MINUTES * 60
+    return seconds
 
 
 def _playlist_mode(modes, every, shuffle, now):
@@ -170,7 +184,8 @@ def _playlist_mode(modes, every, shuffle, now):
         warn_once(f"Ignoring invalid playlist {modes!r} (needs a list of mode names)")
         return None
 
-    slot = (now.toordinal() * 1440 + now.hour * 60 + now.minute) // _every_minutes(every)
+    seconds = now.toordinal() * 86400 + now.hour * 3600 + now.minute * 60 + now.second
+    slot = seconds // _every_seconds(every)
     if not shuffle or len(modes) <= 2:  # shuffling two modes would only cause repeats
         return modes[slot % len(modes)]
 

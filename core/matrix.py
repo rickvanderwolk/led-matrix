@@ -92,7 +92,7 @@ class Matrix:
         if threading.current_thread() is threading.main_thread():
             signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
             signal.signal(signal.SIGINT, lambda *_: sys.exit(0))
-            atexit.register(self.off)
+            atexit.register(self._shutdown)
 
     # Drawing. matrix[x, y] or matrix[index] (row by row, 0 = top left).
     # Writes outside the matrix are ignored, reads outside return None.
@@ -186,6 +186,13 @@ class Matrix:
                 self.pixels.fill(BLACK)
                 self.pixels.show()
                 self._shown = None
+        except Exception:
+            pass
+
+    def _shutdown(self):
+        self.off()
+        try:
+            self.pixels.deinit()  # release the LED driver cleanly
         except Exception:
             pass
 

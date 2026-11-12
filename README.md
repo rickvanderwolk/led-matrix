@@ -84,7 +84,7 @@ Instead of a single mode, `mode` can be a list of modes that switch at a fixed i
 }
 ```
 
-`every` is in minutes (`"30m"`) or hours (`"2h"`), 1 hour by default, and lines up with the clock: `"1h"` switches on the hour. With `shuffle` every mode plays once per round, in a random order. The mode only depends on the time, so after a restart the same mode keeps playing.
+`every` is in seconds (`"30s"`, handy to quickly try all modes), minutes (`"30m"`) or hours (`"2h"`), 1 hour by default, and lines up with the clock: `"1h"` switches on the hour. With `shuffle` every mode plays once per round, in a random order. The mode only depends on the time, so after a restart the same mode keeps playing.
 
 <a id="mode-settings"></a>
 ## Mode settings

@@ -53,7 +53,11 @@ def on_message(ws, message):
 
 topic = matrix.settings.get("topic")
 if not topic:
-    raise ValueError("No ntfy.sh topic found in config.json")
+    # Wait instead of crashing and restarting every few seconds. Adding a topic to the
+    # config restarts this mode with it.
+    print('No ntfy.sh topic set, add one in config.json: "mode_settings": {"ntfy-sh": {"topic": "..."}}')
+    for _ in matrix.frames(fps=1):
+        pass
 
 ws = websocket.WebSocketApp(f"wss://ntfy.sh/{topic}/ws", on_message=on_message)
 listener = threading.Thread(target=ws.run_forever, daemon=True)
