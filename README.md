@@ -64,6 +64,8 @@ Change `mode` in `config.json`. For example: `{"mode": "evolving-square"}` (use 
 
 Changes to `config.json` are picked up automatically within a few seconds, no restart needed. Modes fade out and in when switching.
 
+Mistakes in the config (like a missing comma or an unknown mode) show up in the log, the rest keeps working: `journalctl -u ledmatrix -f`.
+
 <a id="change-brightness"></a>
 ## Change brightness
 
@@ -183,3 +185,5 @@ Try it without hardware using the [visualizer](https://github.com/rickvanderwolk
 Update to latest version. 
 
 `cd ~/led-matrix && git pull && bash install.sh`
+
+Older config names still work: `selected_mode` is now `mode` and `modes` is now `mode_settings`. `install.sh` renames them in `config.json`.

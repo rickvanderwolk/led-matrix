@@ -31,6 +31,8 @@ For example:
 }
 ```
 
+Without a topic the mode stays dark and says so in the log, and `"mode": "all"` skips it. Adding the topic is picked up automatically.
+
 Replace `<your-ntfy-sh-topic>` with your topic in the examples below. 
 
 For example:

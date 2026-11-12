@@ -75,7 +75,7 @@ Je krijgt een lijst van beschikbare modi en kunt er een selecteren.
 Start een specifieke mode direct:
 
 ```bash
-python visualizer/run_mode.py quadrant-clock-with-pomodoro-timer
+python visualizer/run_mode.py clock
 ```
 
 Of gebruik het volledige pad:
@@ -97,7 +97,7 @@ python visualizer/run_mode.py --list
 Gebruik een aangepast config bestand:
 
 ```bash
-python visualizer/run_mode.py quadrant-clock-with-pomodoro-timer --config my-config.json
+python visualizer/run_mode.py clock --config my-config.json
 ```
 
 ## Controls
@@ -119,14 +119,7 @@ De originele scripts worden ongewijzigd uitgevoerd - ze denken dat ze met echte 
 
 ## Ondersteunde Modi
 
-Alle bestaande modi worden ondersteund:
-
-- quadrant-clock-with-pomodoro-timer
-- pixels-fighting
-- led-sort
-- evolving-square
-- ntfy-sh
-- En alle andere modes in de `modes/` directory
+Alle modes in de `modes/` directory worden ondersteund (`--list` toont ze).
 
 ## Technische Details
 
