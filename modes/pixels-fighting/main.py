@@ -71,10 +71,13 @@ def fight():
     matrix.show()
 
     exponent = random.uniform(0.1, 0.3)
-    attempts_per_frame = max(1, round(ATTEMPTS_PER_SECOND / FPS))
+    # Carry the fraction over to the next frame, so any speed works (also below FPS)
+    budget = 0.0
 
     for _ in matrix.frames(fps=FPS):
-        for _ in range(attempts_per_frame):
+        budget += ATTEMPTS_PER_SECOND / FPS
+        attempts, budget = int(budget), budget - int(budget)
+        for _ in range(attempts):
             target = attempt(owner, counts, exponent)
             if target is not None:
                 matrix[target] = colors[owner[target]]
