@@ -70,15 +70,21 @@ def main():
     process = None
     running = None  # fingerprint of the running mode
     retry_at = 0
+    config_error = None  # last error reading the config, to log it only once
 
     while True:
         try:
             mode, fingerprint = desired_state()
         except (OSError, ValueError) as e:
             # Probably mid-edit; keep whatever is running
-            print(f"Could not read config: {e}")
+            if str(e) != config_error:
+                config_error = str(e)
+                print(f"Could not read config, keeping the current mode: {e}")
             time.sleep(CHECK_INTERVAL)
             continue
+        if config_error:
+            config_error = None
+            print("Config is readable again")
 
         if process and process.poll() is not None:
             print(f"Mode exited. Restarting in {RESTART_DELAY} seconds...")
