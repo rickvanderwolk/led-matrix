@@ -44,8 +44,7 @@ def start(mode):
 
     script_path = os.path.join(MODES_DIR, mode, "main.py")
     if not os.path.exists(script_path):
-        available = sorted(m for m in os.listdir(MODES_DIR) if os.path.exists(os.path.join(MODES_DIR, m, "main.py")))
-        config.warn_once(f"Unknown mode '{mode}'. Available modes: {', '.join(available)}")
+        config.warn_once(f"Unknown mode '{mode}'. Available modes: {', '.join(config.available_modes())}")
         return None
 
     print(f"Running mode: {mode} (LED Matrix v{__version__})")

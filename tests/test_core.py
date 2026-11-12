@@ -159,6 +159,38 @@ class PlaylistTest(unittest.TestCase):
         self.assertIsNone(self.mode_at({"mode": {"playlist": ["a"]}}, at("12:00")))
 
 
+class AllModesTest(unittest.TestCase):
+    def modes_in_all(self, conf):
+        """Every mode "all" plays, by switching every second for a few minutes."""
+        conf = dict(conf, mode="all", switch_every="1s")
+        start = datetime(2026, 3, 1, 12, 0, 0)
+        config._warned.clear()  # warnings show once per process
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            seen = {config.active(conf, start.replace(second=s))["mode"] for s in range(60)}
+        return seen, output.getvalue()
+
+    def test_plays_every_mode_except_ones_missing_a_required_setting(self):
+        seen, log = self.modes_in_all({})
+        self.assertEqual(seen, set(config.available_modes()) - {"ntfy-sh"})
+        self.assertIn("Skipping ntfy-sh", log)
+
+    def test_includes_a_mode_once_its_setting_is_there(self):
+        seen, _ = self.modes_in_all({"mode_settings": {"ntfy-sh": {"topic": "abc"}}})
+        self.assertIn("ntfy-sh", seen)
+
+    def test_skip_modes(self):
+        seen, _ = self.modes_in_all({"skip_modes": ["clock", "led-sort"]})
+        self.assertNotIn("clock", seen)
+        self.assertNotIn("led-sort", seen)
+        self.assertIn("collision", seen)
+
+    def test_all_per_time(self):
+        conf = {"mode": {"07:00": "clock", "18:00": "all"}}
+        self.assertEqual(config.active(conf, at("12:00"))["mode"], "clock")
+        self.assertIn(config.active(conf, at("19:00"))["mode"], config.available_modes())
+
+
 class BrightnessTest(unittest.TestCase):
     def test_valid_and_clamped(self):
         self.assertEqual(config.brightness({"brightness": 0.5}), 0.5)

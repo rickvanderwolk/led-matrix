@@ -84,12 +84,24 @@ Instead of a single mode, `mode` can be a list of modes that take turns:
 }
 ```
 
+Use `"all"` to switch between all modes, also ones added later. Leave modes out with `skip_modes`:
+
+```json
+{
+  "mode": "all",
+  "skip_modes": ["clock"],
+  "switch_every": "15m"
+}
+```
+
+Modes that need a setting to show anything (like the ntfy.sh topic) are left out of `"all"` until that setting is there; the log says so.
+
 `switch_every` is in seconds (`"30s"`, handy to quickly try all modes), minutes (`"15m"`) or hours (`"2h"`), 1 hour by default, and lines up with the clock: `"1h"` switches on the hour. With `shuffle` every mode plays once per round, in a random order. The mode only depends on the time, so after a restart the same mode keeps playing.
 
 <a id="set-times"></a>
 ## Change at set times
 
-`mode`, `brightness`, `switch_every` and `shuffle` can also be set per time. Each value applies from its time until the next one, wrapping around midnight. For example, switch between modes all day, dim in the evening and switch off at night:
+`mode`, `skip_modes`, `brightness`, `switch_every` and `shuffle` can also be set per time. Each value applies from its time until the next one, wrapping around midnight. For example, switch between modes all day, dim in the evening and switch off at night:
 
 ```json
 {
@@ -99,11 +111,11 @@ Instead of a single mode, `mode` can be a list of modes that take turns:
 }
 ```
 
-Or show the clock during the day and switch between modes in the evening:
+Or show the clock during the day and switch between all modes in the evening:
 
 ```json
 {
-  "mode": { "07:00": "clock", "18:00": ["collision", "pathfinder"] },
+  "mode": { "07:00": "clock", "18:00": "all" },
   "brightness": { "07:00": 0.2, "23:00": 0 }
 }
 ```
@@ -145,7 +157,7 @@ If the matrix is mounted rotated or mirrored:
 <a id="create-a-mode"></a>
 ## Create a mode
 
-A mode is a directory in `modes/` with a `main.py`. The `core` package takes care of the hardware, config, brightness, set times, orientation and switching the LEDs off on exit, so a mode only has to draw:
+A mode is a directory in `modes/` with a `main.py` (any name except `all`). The `core` package takes care of the hardware, config, brightness, set times, orientation and switching the LEDs off on exit, so a mode only has to draw:
 
 ```python
 from core import Matrix, hsv

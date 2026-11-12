@@ -11,6 +11,7 @@ import re
 from datetime import datetime
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MODES_DIR = os.path.join(BASE_DIR, "modes")
 DEFAULT_BRIGHTNESS = 0.2
 DEFAULT_PLAYLIST_MINUTES = 60
 
@@ -18,6 +19,11 @@ DEFAULT_PLAYLIST_MINUTES = 60
 RENAMED_KEYS = {
     "selected_mode": "mode",
     "modes": "mode_settings",
+}
+
+# Settings a mode can't do without. "all" skips these modes until the setting is there.
+REQUIRED_SETTINGS = {
+    "ntfy-sh": "topic",
 }
 
 _warned = set()
@@ -54,7 +60,7 @@ def upgrade(config):
     return renamed
 
 
-TIMED_KEYS = ("mode", "brightness", "switch_every", "shuffle")
+TIMED_KEYS = ("mode", "skip_modes", "brightness", "switch_every", "shuffle")
 
 
 def _minutes(time):
@@ -91,9 +97,9 @@ def active(config, now=None):
     """
     Return the config as it applies right now.
 
-    "mode", "brightness", "switch_every" and "shuffle" can be a value, or a value per time
-    like {"07:00": 0.2, "23:00": 0}. A list in "mode" switches between those modes and is
-    resolved to the mode for the current time slot.
+    The keys in TIMED_KEYS can be a value, or a value per time like {"07:00": 0.2, "23:00": 0}.
+    A list in "mode" (or "all") switches between those modes and is resolved to the mode for
+    the current time slot.
     """
     now = now or datetime.now()
     active = upgrade(config)
@@ -105,13 +111,6 @@ def active(config, now=None):
                 del active[key]
             else:
                 active[key] = value
-
-    mode = active.get("mode")
-    if isinstance(mode, list):
-        active["mode"] = _switched_mode(mode, active.get("switch_every"), active.get("shuffle"), now)
-    elif mode is not None and not isinstance(mode, str):
-        warn_once(f"Ignoring invalid mode {mode!r} (use a mode name, a list of mode names or times)")
-        active["mode"] = None
 
     # Keys that must be objects; drop anything else so modes can rely on .get()
     for key in ("display", "mode_settings"):
@@ -126,7 +125,44 @@ def active(config, now=None):
             else:
                 warn_once(f"Ignoring invalid mode_settings for {name}: {value!r} (use an object, like {{...}})")
         active["mode_settings"] = settings
+
+    mode = active.get("mode")
+    if mode == "all":
+        mode = _all_modes(active)
+    if isinstance(mode, list):
+        active["mode"] = _switched_mode(mode, active.get("switch_every"), active.get("shuffle"), now)
+    elif mode is not None and not isinstance(mode, str):
+        warn_once(f"Ignoring invalid mode {mode!r} (use a mode name, a list of mode names or times)")
+        active["mode"] = None
     return active
+
+
+def available_modes():
+    """Names of all modes: directories in modes/ with a main.py. "all" is reserved."""
+    if not os.path.isdir(MODES_DIR):
+        return []
+    return sorted(
+        name for name in os.listdir(MODES_DIR)
+        if name != "all" and os.path.exists(os.path.join(MODES_DIR, name, "main.py"))
+    )
+
+
+def _all_modes(active):
+    """The modes "all" plays: every mode, minus skip_modes and modes missing a required setting."""
+    skip = active.get("skip_modes", [])
+    if not (isinstance(skip, list) and all(isinstance(name, str) for name in skip)):
+        warn_once(f"Ignoring invalid skip_modes {skip!r} (use a list of mode names)")
+        skip = []
+    modes = []
+    for name in available_modes():
+        if name in skip:
+            continue
+        required = REQUIRED_SETTINGS.get(name)
+        if required and not active.get("mode_settings", {}).get(name, {}).get(required):
+            warn_once(f'Skipping {name} in "all": it needs mode_settings.{name}.{required}')
+            continue
+        modes.append(name)
+    return modes
 
 
 def brightness(config):
