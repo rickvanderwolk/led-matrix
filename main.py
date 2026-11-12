@@ -44,7 +44,8 @@ def start(mode):
 
     script_path = os.path.join(MODES_DIR, mode, "main.py")
     if not os.path.exists(script_path):
-        print(f"No script found for mode: {mode}")
+        available = sorted(m for m in os.listdir(MODES_DIR) if os.path.exists(os.path.join(MODES_DIR, m, "main.py")))
+        config.warn_once(f"Unknown mode '{mode}'. Available modes: {', '.join(available)}")
         return None
 
     print(f"Running mode: {mode} (LED Matrix v{__version__})")
@@ -92,7 +93,8 @@ def main():
 
         if process is None and time.monotonic() >= retry_at:
             if not mode:
-                print("No mode selected. Waiting...")
+                if fingerprint != running:  # say it once, not every retry
+                    print("No mode selected. Waiting...")
             else:
                 process = start(mode)
             running = fingerprint

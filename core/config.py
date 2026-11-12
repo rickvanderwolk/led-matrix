@@ -7,6 +7,7 @@ No hardware imports here, so main.py can use this without touching the LEDs.
 import json
 import os
 import random
+import re
 from datetime import datetime
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -22,7 +23,7 @@ RENAMED_KEYS = {
 _warned = set()
 
 
-def _warn_once(message):
+def warn_once(message):
     # The config is re-read every few seconds; don't repeat the same warning in the log
     if message not in _warned:
         _warned.add(message)
@@ -42,21 +43,15 @@ def load(config_path=None):
 
 
 def upgrade(config):
-    """Rename old keys to their current names, at the top level and in schedule entries."""
-    def rename(section):
-        # Rename in place to keep the key order; a key that already uses the new name wins
-        renamed = {}
-        for key, value in section.items():
-            new = RENAMED_KEYS.get(key, key)
-            if new != key and new in section:
-                continue
-            renamed[new] = value
-        return renamed
-
-    config = rename(config)
-    if isinstance(config.get("schedule"), list):
-        config["schedule"] = [rename(e) if isinstance(e, dict) else e for e in config["schedule"]]
-    return config
+    """Rename old keys to their current names."""
+    # Rename in place to keep the key order; a key that already uses the new name wins
+    renamed = {}
+    for key, value in config.items():
+        new = RENAMED_KEYS.get(key, key)
+        if new != key and new in config:
+            continue
+        renamed[new] = value
+    return renamed
 
 
 def merge(base, override):
@@ -70,40 +65,64 @@ def merge(base, override):
     return result
 
 
-def _minutes(entry):
+def _minutes(time):
     try:
-        hours, minutes = entry["from"].split(":")
+        hours, minutes = time.split(":")
         hours, minutes = int(hours), int(minutes)
-    except (KeyError, AttributeError, ValueError):
+    except ValueError:
         return None
     if not (0 <= hours < 24 and 0 <= minutes < 60):
         return None
     return hours * 60 + minutes
 
 
+def _overlap(base, override, prefix=""):
+    """Keys (dotted for nested dicts) that override replaces in base."""
+    keys = []
+    for key, value in override.items():
+        if key not in base:
+            continue
+        if isinstance(value, dict) and isinstance(base[key], dict):
+            keys += _overlap(base[key], value, f"{prefix}{key}.")
+        else:
+            keys.append(prefix + key)
+    return keys
+
+
 def active(config, now=None):
     """
     Return the config as it applies right now.
 
-    Each schedule entry overrides any config key from its "from" time onwards. Entries
-    stack: a value stays in effect until a later entry changes it, wrapping around
-    midnight. A playlist in "mode" is resolved to the mode for the current time slot.
+    Each schedule entry overrides any config key from its time onwards. Entries stack: a
+    value stays in effect until a later entry changes it, wrapping around midnight. A list
+    in "mode" is a playlist, resolved to the mode for the current time slot.
     """
     now = now or datetime.now()
     config = upgrade(config)
     base = {key: value for key, value in config.items() if key != "schedule"}
+    schedule = config.get("schedule") or {}
+    if not isinstance(schedule, dict):
+        warn_once('Ignoring schedule: use times as keys, like {"07:00": {"brightness": 0.2}}')
+        schedule = {}
     entries = []
-    for entry in config.get("schedule") or []:
-        minutes = _minutes(entry) if isinstance(entry, dict) else None
-        if minutes is None:
-            _warn_once(f"Ignoring invalid schedule entry: {entry!r}")
+    for time, values in schedule.items():
+        minutes = _minutes(time)
+        if minutes is None or not isinstance(values, dict):
+            warn_once(f"Ignoring invalid schedule entry: {time!r}: {values!r}")
             continue
-        entries.append((minutes, {key: value for key, value in entry.items() if key != "from"}))
+        entries.append((minutes, values))
+        for key in _overlap(base, values):
+            warn_once(f"'{key}' is set both in the schedule and outside it: the schedule always wins, "
+                      f"so the value outside it is never used")
 
     if entries:
         base = _apply_schedule(base, entries, now)
-    if isinstance(base.get("mode"), dict):
-        base["mode"] = _playlist_mode(base["mode"], now)
+    mode = base.get("mode")
+    if isinstance(mode, list):
+        base["mode"] = _playlist_mode(mode, base.get("every"), base.get("shuffle"), now)
+    elif mode is not None and not isinstance(mode, str):
+        warn_once(f"Ignoring invalid mode {mode!r} (use a mode name or a list of mode names)")
+        base["mode"] = None
     return base
 
 
@@ -123,28 +142,36 @@ def brightness(config):
     """The configured brightness as a number from 0 to 1."""
     value = config.get("brightness", DEFAULT_BRIGHTNESS)
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        _warn_once(f"Ignoring invalid brightness {value!r} (use a number from 0 to 1)")
+        warn_once(f"Ignoring invalid brightness {value!r} (use a number from 0 to 1)")
         return DEFAULT_BRIGHTNESS
     return max(0.0, min(1.0, float(value)))
 
 
-def _playlist_mode(playlist, now):
+def _every_minutes(every):
+    """A playlist interval like "30m" or "2h" in minutes."""
+    if every is None:
+        return DEFAULT_PLAYLIST_MINUTES
+    match = re.fullmatch(r"(\d+)([mh])", every) if isinstance(every, str) else None
+    minutes = int(match[1]) * (60 if match[2] == "h" else 1) if match else 0
+    if minutes <= 0:
+        warn_once(f'Ignoring invalid playlist interval {every!r} (use a value like "30m" or "2h"), '
+                  f"using {DEFAULT_PLAYLIST_MINUTES} minutes")
+        return DEFAULT_PLAYLIST_MINUTES
+    return minutes
+
+
+def _playlist_mode(modes, every, shuffle, now):
     """
     The mode a playlist plays right now. Slots line up with the clock (every 60 minutes
     switches on the hour), and the result only depends on the time, so a restart keeps
     playing the same mode.
     """
-    modes = playlist.get("playlist")
-    every = playlist.get("every", DEFAULT_PLAYLIST_MINUTES)
-    if not (isinstance(modes, list) and modes and all(isinstance(m, str) for m in modes)):
-        _warn_once(f"Ignoring invalid playlist {playlist!r} (needs a list of mode names)")
+    if not (modes and all(isinstance(m, str) for m in modes)):
+        warn_once(f"Ignoring invalid playlist {modes!r} (needs a list of mode names)")
         return None
-    if isinstance(every, bool) or not isinstance(every, (int, float)) or every <= 0:
-        _warn_once(f"Ignoring invalid playlist interval {every!r}, using {DEFAULT_PLAYLIST_MINUTES} minutes")
-        every = DEFAULT_PLAYLIST_MINUTES
 
-    slot = int((now.toordinal() * 1440 + now.hour * 60 + now.minute) // every)
-    if not playlist.get("shuffle") or len(modes) <= 2:  # shuffling two modes would only cause repeats
+    slot = (now.toordinal() * 1440 + now.hour * 60 + now.minute) // _every_minutes(every)
+    if not shuffle or len(modes) <= 2:  # shuffling two modes would only cause repeats
         return modes[slot % len(modes)]
 
     # Shuffle each round through the list with a fixed seed, so every mode plays once per round

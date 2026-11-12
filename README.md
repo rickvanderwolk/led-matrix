@@ -74,19 +74,17 @@ Brightness changes fade in smoothly, without restarting the running mode.
 <a id="playlist"></a>
 ## Playlist
 
-Instead of a single mode, `mode` can be a playlist that switches modes at a fixed interval:
+Instead of a single mode, `mode` can be a list of modes that switch at a fixed interval:
 
 ```json
 {
-  "mode": {
-    "playlist": ["collision", "pathfinder", "pixels-fighting", "led-sort"],
-    "every": 60,
-    "shuffle": true
-  }
+  "mode": ["collision", "pathfinder", "pixels-fighting", "led-sort"],
+  "every": "30m",
+  "shuffle": true
 }
 ```
 
-`every` is in minutes (default 60) and lines up with the clock: every 60 minutes switches on the hour. With `shuffle` every mode plays once per round, in a random order. The mode only depends on the time, so after a restart the same mode keeps playing.
+`every` is in minutes (`"30m"`) or hours (`"2h"`), 1 hour by default, and lines up with the clock: `"1h"` switches on the hour. With `shuffle` every mode plays once per round, in a random order. The mode only depends on the time, so after a restart the same mode keeps playing.
 
 <a id="mode-settings"></a>
 ## Mode settings
@@ -112,22 +110,20 @@ Change any config value at set times, for example to dim the matrix in the eveni
 
 ```json
 {
-  "mode": "clock",
-  "brightness": 0.2,
-  "schedule": [
-    { "from": "07:00", "mode": "clock", "brightness": 0.2 },
-    { "from": "18:00", "mode": { "playlist": ["collision", "pathfinder"], "every": 30 } },
-    { "from": "21:30", "brightness": 0.05 },
-    { "from": "23:00", "brightness": 0 }
-  ]
+  "schedule": {
+    "07:00": { "mode": "clock", "brightness": 0.2 },
+    "18:00": { "mode": ["collision", "pathfinder"], "every": "30m" },
+    "21:30": { "brightness": 0.05 },
+    "23:00": { "brightness": 0 }
+  }
 }
 ```
 
-Each entry changes the keys it contains, from its `from` time until a later entry changes them again, wrapping around midnight. In the example above the playlist keeps playing at 21:30, only dimmer, and at 07:00 the clock comes back at full brightness.
+Each entry changes the keys it contains, from its time until a later entry changes them again, wrapping around midnight. In the example above the playlist keeps playing at 21:30, only dimmer, and at 07:00 the clock comes back at full brightness.
 
-Because values stay until changed, a key that is set anywhere in the schedule needs an entry that sets it back (like 07:00 above). The values outside the schedule only apply to keys the schedule doesn't touch.
+Because values stay until changed, a key that is set anywhere in the schedule needs an entry that sets it back (like 07:00 above). That goes for `every` and `shuffle` too. Keep keys the schedule sets out of the rest of the config: there the schedule always wins.
 
-Entries can contain anything the config can, including `mode_settings`, for example a different ntfy.sh topic in the evening: `{ "from": "18:00", "mode_settings": { "ntfy-sh": { "topic": "..." } } }`.
+Entries can contain anything the config can, including `mode_settings`, for example a different ntfy.sh topic in the evening: `"18:00": { "mode_settings": { "ntfy-sh": { "topic": "..." } } }`.
 
 The schedule uses the Pi's system time, so make sure the time zone is set (`sudo raspi-config` > Localisation Options > Timezone).
 
@@ -142,7 +138,7 @@ If the matrix is mounted rotated or mirrored:
 }
 ```
 
-`rotate` is clockwise: 0, 90, 180 or 270. Optionally add `"gamma": 2.2` for smoother fades (off by default, as it makes the existing mode colors darker).
+`rotate` is clockwise: 0, 90, 180 or 270.
 
 <a id="create-a-mode"></a>
 ## Create a mode

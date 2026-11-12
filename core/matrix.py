@@ -2,8 +2,8 @@
 The LED matrix as modes see it: an 8x8 canvas you draw on, then show().
 
 Everything that isn't mode logic lives here: config, brightness (including the
-schedule and fading), rotation/flipping, gamma, frame timing and switching the LEDs
-off on exit.
+schedule and fading), rotation/flipping, frame timing and switching the LEDs off on
+exit.
 """
 
 import atexit
@@ -61,13 +61,6 @@ def _build_map(display):
     return source
 
 
-def _build_gamma(gamma):
-    """Lookup table for gamma correction. None for gamma 1 (off)."""
-    if gamma == 1:
-        return None
-    return [round(255 * (v / 255) ** gamma) for v in range(256)]
-
-
 class Matrix:
     width = WIDTH
     height = HEIGHT
@@ -81,9 +74,7 @@ class Matrix:
         # This mode's own settings: config["mode_settings"][<mode name>]
         self.settings = config.get("mode_settings", {}).get(self.mode, {})
 
-        display = config.get("display", {})
-        self._map = _build_map(display)
-        self._gamma = _build_gamma(display.get("gamma", 1))
+        self._map = _build_map(config.get("display", {}))
 
         self._canvas = [BLACK] * COUNT
         self._shown = None
@@ -148,12 +139,7 @@ class Matrix:
         with self._lock:
             self._check_config()
 
-            frame = self._canvas if self._map is None else [self._canvas[i] for i in self._map]
-            if self._gamma is not None:
-                g = self._gamma
-                frame = [(g[r], g[gr], g[b]) for r, gr, b in frame]
-            else:
-                frame = list(frame)
+            frame = list(self._canvas) if self._map is None else [self._canvas[i] for i in self._map]
 
             if frame != self._shown:
                 self.pixels[:] = frame
