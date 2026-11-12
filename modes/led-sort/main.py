@@ -1,42 +1,24 @@
-import os
-import json
+#!/usr/bin/env python3
+
 import time
 import random
-import board
-import neopixel
+from core import Matrix
 
-CONFIG_PATH = os.environ.get("LEDMATRIX_CONFIG", "config.json")
-with open(CONFIG_PATH) as f:
-    config = json.load(f)
+matrix = Matrix()
 
-LED_COUNT = 64
-PIN = board.D18
-BRIGHTNESS = config.get("brightness", 0.2)
+LED_COUNT = matrix.count
 SLEEP_BETWEEN_CHANGES = 0.1
 SLEEP_BETWEEN_ALGORITHMS = 2
 
-matrix = neopixel.NeoPixel(PIN, LED_COUNT, brightness=BRIGHTNESS, auto_write=False)
-
-def get_matrix_index(i):
-    return i
-
 def update_leds(array, changed_indices=None):
-    updated = False
     for i in range(LED_COUNT):
-        idx = get_matrix_index(i)
         if changed_indices and i in changed_indices:
-            new_color = (255, 255, 255)
+            matrix[i] = (255, 255, 255)
         elif array[i] == i:
-            new_color = (0, 255, 0)
+            matrix[i] = (0, 255, 0)
         else:
-            new_color = (255, 0, 0)
-
-        if matrix[idx] != new_color:
-            matrix[idx] = new_color
-            updated = True
-
-    if updated:
-        matrix.show()
+            matrix[i] = (255, 0, 0)
+    matrix.show()
 
 def shuffled_array():
     values = list(range(LED_COUNT))

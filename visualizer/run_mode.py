@@ -54,7 +54,8 @@ def run_mode(mode_path, config_path=None):
             os.environ["LEDMATRIX_CONFIG"] = default_config
 
     # Create visualizer (but don't start it yet)
-    mode_name = os.path.basename(os.path.dirname(mode_path))
+    mode_name = os.path.basename(os.path.dirname(os.path.abspath(mode_path)))
+    os.environ["LEDMATRIX_MODE"] = mode_name
 
     print(f"Starting visualizer for mode: {mode_name}")
     print("Controls:")

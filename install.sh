@@ -16,7 +16,7 @@ echo "Installing Python packages in virtualenv..."
 "$INSTALL_DIR/ledmatrix/bin/pip" install --upgrade pip
 "$INSTALL_DIR/ledmatrix/bin/pip" install rpi_ws281x adafruit-circuitpython-neopixel RPi.GPIO websocket-client
 
-echo "Ensuring config.json exists with required keys (excluding placeholders)..."
+echo "Ensuring config.json exists with current key names and required keys (excluding placeholders)..."
 CONFIG_EXAMPLE="$INSTALL_DIR/config.example.json"
 CONFIG_TARGET="$INSTALL_DIR/config.json"
 
@@ -27,7 +27,11 @@ else
   "$INSTALL_DIR/ledmatrix/bin/python3" - <<EOF
 import json
 import re
+import sys
 from pathlib import Path
+
+sys.path.insert(0, "$INSTALL_DIR")
+from core.config import upgrade
 
 example_path = Path("$CONFIG_EXAMPLE")
 target_path = Path("$CONFIG_TARGET")
@@ -38,6 +42,9 @@ with example_path.open() as f:
 with target_path.open() as f:
     target = json.load(f)
 
+# Rename old keys first, so the example's defaults can't override the user's choices
+target = upgrade(target)
+
 for key, value in example.items():
     if key not in target:
         if isinstance(value, str) and re.fullmatch(r"<.*?>", value):
@@ -47,7 +54,7 @@ for key, value in example.items():
 with target_path.open("w") as f:
     json.dump(target, f, indent=4)
 EOF
-  echo "config.json updated with missing non-placeholder keys from config.example.json"
+  echo "config.json updated to current key names and missing non-placeholder keys from config.example.json"
 fi
 
 echo "Creating systemd service file for LED matrix..."
