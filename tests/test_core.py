@@ -26,63 +26,43 @@ def at(hhmm):
     return datetime(2026, 1, 1, hours, minutes)
 
 
-SCHEDULED = {
-    "mode_settings": {"led-sort": {"other": 1}},
-    "schedule": {
-        "07:00": {"mode": "clock", "brightness": 0.2},
-        "19:00": {"mode": "collision"},
-        "21:30": {"brightness": 0.05, "mode_settings": {"led-sort": {"speed": 0.5}}},
-        "23:00": {"brightness": 0},
-    },
-}
+class TimesTest(unittest.TestCase):
+    CONF = {
+        "mode": {"07:00": "clock", "19:00": "collision"},
+        "brightness": {"07:00": 0.2, "21:30": 0.05, "23:00": 0},
+    }
 
-
-class ScheduleTest(unittest.TestCase):
-    def test_without_schedule_returns_config(self):
+    def test_plain_values_are_returned_as_is(self):
         self.assertEqual(config.active({"brightness": 0.3}), {"brightness": 0.3})
 
-    def test_entries_stack_until_changed(self):
-        active = config.active(SCHEDULED, at("21:45"))
+    def test_value_of_the_latest_time_that_passed(self):
+        active = config.active(self.CONF, at("21:45"))
         self.assertEqual(active["mode"], "collision")
         self.assertEqual(active["brightness"], 0.05)
 
     def test_wraps_around_midnight(self):
-        active = config.active(SCHEDULED, at("02:00"))
+        active = config.active(self.CONF, at("02:00"))
         self.assertEqual(active["mode"], "collision")
         self.assertEqual(active["brightness"], 0)
 
-    def test_entry_applies_from_its_minute(self):
-        self.assertEqual(config.active(SCHEDULED, at("06:59"))["brightness"], 0)
-        self.assertEqual(config.active(SCHEDULED, at("07:00"))["brightness"], 0.2)
+    def test_applies_from_its_minute(self):
+        self.assertEqual(config.active(self.CONF, at("06:59"))["brightness"], 0)
+        self.assertEqual(config.active(self.CONF, at("07:00"))["brightness"], 0.2)
 
-    def test_nested_settings_merge(self):
-        active = config.active(SCHEDULED, at("22:00"))
-        self.assertEqual(active["mode_settings"]["led-sort"], {"speed": 0.5, "other": 1})
-        self.assertNotIn("schedule", active)
+    def test_settings_have_their_own_times(self):
+        conf = {"mode": ["a", "b"], "brightness": {"07:00": 0.2, "23:00": 0}}
+        self.assertIn(config.active(conf, at("23:30"))["mode"], ["a", "b"])
 
     def test_does_not_modify_input(self):
-        config.active(SCHEDULED, at("22:00"))
-        self.assertEqual(SCHEDULED["mode_settings"]["led-sort"], {"other": 1})
+        config.active(self.CONF, at("22:00"))
+        self.assertEqual(self.CONF["brightness"], {"07:00": 0.2, "21:30": 0.05, "23:00": 0})
 
-    def test_warns_once_about_keys_set_in_and_outside_the_schedule(self):
-        conf = {
-            "brightness": 0.3,
-            "display": {"rotate": 90},
-            "mode_settings": {"ntfy-sh": {"topic": "a"}, "clock": {"x": 1}},
-            "schedule": {"08:00": {"brightness": 1, "mode_settings": {"ntfy-sh": {"topic": "b"}}}},
-        }
-        output = io.StringIO()
-        with contextlib.redirect_stdout(output):
-            config.active(conf, at("12:00"))
-            config.active(conf, at("12:00"))
-        self.assertEqual(output.getvalue().count("'brightness' is set both"), 1)
-        self.assertIn("'mode_settings.ntfy-sh.topic' is set both", output.getvalue())
-        self.assertNotIn("display", output.getvalue())
-        self.assertNotIn("clock", output.getvalue())
-
-    def test_invalid_entries_are_ignored(self):
-        conf = {"brightness": 0.2, "schedule": {"25:00": {"brightness": 1}, "x": {"brightness": 1}, "08:00": 1}}
-        self.assertEqual(config.active(conf, at("12:00"))["brightness"], 0.2)
+    def test_invalid_times_are_ignored(self):
+        conf = {"brightness": {"25:00": 1, "x": 1, "08:00": 0.4}}
+        self.assertEqual(config.active(conf, at("12:00"))["brightness"], 0.4)
+        self.assertNotIn("brightness", config.active({"brightness": {"x": 1}}, at("12:00")))
+        self.assertEqual(config.brightness(config.active({"brightness": {"x": 1}}, at("12:00"))),
+                         config.DEFAULT_BRIGHTNESS)
 
     def test_settings_that_are_not_objects_are_ignored(self):
         conf = {"display": [90], "mode_settings": {"ntfy-sh": "abc", "clock": {"x": 1}}}
@@ -91,10 +71,6 @@ class ScheduleTest(unittest.TestCase):
         self.assertEqual(active["mode_settings"], {"clock": {"x": 1}})
         self.assertEqual(conf["mode_settings"]["ntfy-sh"], "abc")
         self.assertNotIn("mode_settings", config.active({"mode_settings": [1]}, at("12:00")))
-
-    def test_schedule_without_times_as_keys_is_ignored(self):
-        conf = {"brightness": 0.2, "schedule": [{"from": "08:00", "brightness": 1}]}
-        self.assertEqual(config.active(conf, at("12:00"))["brightness"], 0.2)
 
 
 class UpgradeTest(unittest.TestCase):
@@ -122,34 +98,34 @@ class PlaylistTest(unittest.TestCase):
     MODES = ["a", "b", "c", "d"]
 
     def mode_at(self, conf, when):
-        return config.active(conf, when)["mode"]
+        return config.active(conf, when).get("mode")
 
     def test_in_order_and_switches_on_the_hour(self):
-        conf = {"mode": self.MODES, "every": "1h"}
+        conf = {"mode": self.MODES, "switch_every": "1h"}
         self.assertEqual(self.mode_at(conf, at("10:00")), self.mode_at(conf, at("10:59")))
         seq = [self.mode_at(conf, at(f"{h:02d}:00")) for h in range(8)]
         first = self.MODES.index(seq[0])
         self.assertEqual(seq, [self.MODES[(first + i) % 4] for i in range(8)])
 
-    def test_every_is_written_with_a_unit(self):
-        conf = {"mode": self.MODES, "every": "30m"}
+    def test_switch_every_is_written_with_a_unit(self):
+        conf = {"mode": self.MODES, "switch_every": "30m"}
         self.assertEqual(self.mode_at(conf, at("10:00")), self.mode_at(conf, at("10:29")))
         self.assertNotEqual(self.mode_at(conf, at("10:00")), self.mode_at(conf, at("10:30")))
-        ten_seconds = {"mode": self.MODES, "every": "10s"}
+        ten_seconds = {"mode": self.MODES, "switch_every": "10s"}
         t = datetime(2026, 3, 1, 10, 0, 0)
         self.assertEqual(self.mode_at(ten_seconds, t), self.mode_at(ten_seconds, t.replace(second=9)))
         self.assertNotEqual(self.mode_at(ten_seconds, t), self.mode_at(ten_seconds, t.replace(second=10)))
-        two_hours = {"mode": self.MODES, "every": "2h"}
+        two_hours = {"mode": self.MODES, "switch_every": "2h"}
         self.assertEqual(self.mode_at(two_hours, at("10:00")), self.mode_at(two_hours, at("11:59")))
 
-    def test_invalid_every_uses_the_default(self):
+    def test_invalid_switch_every_uses_the_default(self):
         hourly = {"mode": self.MODES}
         for every in (30, "30", "0m", "1d", True):
-            conf = {"mode": self.MODES, "every": every}
+            conf = {"mode": self.MODES, "switch_every": every}
             self.assertEqual(self.mode_at(conf, at("10:30")), self.mode_at(hourly, at("10:30")))
 
     def test_shuffle_plays_each_once_per_round_without_repeats(self):
-        conf = {"mode": self.MODES, "every": "1m", "shuffle": True}
+        conf = {"mode": self.MODES, "switch_every": "1m", "shuffle": True}
         start = datetime(2026, 3, 1, 0, 0)
         seq = [self.mode_at(conf, start.replace(hour=m // 60, minute=m % 60)) for m in range(400)]
         self.assertTrue(all(a != b for a, b in zip(seq, seq[1:])))
@@ -160,31 +136,22 @@ class PlaylistTest(unittest.TestCase):
             self.assertEqual(sorted(seq[i:i + 4]), self.MODES)
 
     def test_shuffle_is_deterministic(self):
-        conf = {"mode": self.MODES, "every": "30m", "shuffle": True}
+        conf = {"mode": self.MODES, "switch_every": "30m", "shuffle": True}
         self.assertEqual(self.mode_at(conf, at("14:20")), self.mode_at(conf, at("14:00")))
 
-    def test_schedule_switches_between_mode_and_playlist(self):
-        conf = {
-            "schedule": {
-                "08:00": {"mode": "clock"},
-                "18:00": {"mode": ["x", "y"], "every": "30m"},
-            },
-        }
+    def test_mode_per_time_switches_between_a_mode_and_a_list(self):
+        conf = {"mode": {"08:00": "clock", "18:00": ["x", "y"]}, "switch_every": "30m"}
         self.assertEqual(self.mode_at(conf, at("12:00")), "clock")
         self.assertIn(self.mode_at(conf, at("19:00")), ["x", "y"])
         self.assertIn(self.mode_at(conf, at("07:00")), ["x", "y"])
 
-    def test_a_new_playlist_replaces_the_list_and_keeps_every_until_changed(self):
+    def test_switch_every_per_time(self):
         conf = {
-            "schedule": {
-                "08:00": {"mode": ["a", "b", "c"], "every": "30m"},
-                "18:00": {"mode": ["x", "y", "z"]},
-                "21:00": {"every": "2h"},
-            },
+            "mode": {"08:00": ["a", "b", "c"], "18:00": ["x", "y", "z"]},
+            "switch_every": {"08:00": "30m", "18:00": "2h"},
         }
-        self.assertIn(self.mode_at(conf, at("19:00")), ["x", "y", "z"])
-        self.assertNotEqual(self.mode_at(conf, at("19:00")), self.mode_at(conf, at("19:30")))
-        self.assertEqual(self.mode_at(conf, at("22:00")), self.mode_at(conf, at("23:59")))
+        self.assertNotEqual(self.mode_at(conf, at("10:00")), self.mode_at(conf, at("10:30")))
+        self.assertEqual(self.mode_at(conf, at("18:00")), self.mode_at(conf, at("19:59")))
 
     def test_invalid_mode(self):
         self.assertIsNone(self.mode_at({"mode": []}, at("12:00")))

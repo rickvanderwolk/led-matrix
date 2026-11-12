@@ -10,9 +10,9 @@ A Python (Raspberry Pi) project to control an 8x8 LED matrix with various visual
 - [Modes](#modes)
 - [Change mode](#change-mode)
 - [Change brightness](#change-brightness)
-- [Playlist](#playlist)
+- [Switch between modes](#switch-modes)
+- [Change at set times](#set-times)
 - [Mode settings](#mode-settings)
-- [Schedule](#schedule)
 - [Display orientation](#display)
 - [Create a mode](#create-a-mode)
 - [Update](#update)
@@ -71,25 +71,51 @@ Change `brightness` in `config.json`. For example: `{"brightness": 0.25}` (use 0
 
 Brightness changes fade in smoothly, without restarting the running mode.
 
-<a id="playlist"></a>
-## Playlist
+<a id="switch-modes"></a>
+## Switch between modes
 
-Instead of a single mode, `mode` can be a list of modes that switch at a fixed interval:
+Instead of a single mode, `mode` can be a list of modes that take turns:
 
 ```json
 {
   "mode": ["collision", "pathfinder", "pixels-fighting", "led-sort"],
-  "every": "30m",
+  "switch_every": "15m",
   "shuffle": true
 }
 ```
 
-`every` is in seconds (`"30s"`, handy to quickly try all modes), minutes (`"30m"`) or hours (`"2h"`), 1 hour by default, and lines up with the clock: `"1h"` switches on the hour. With `shuffle` every mode plays once per round, in a random order. The mode only depends on the time, so after a restart the same mode keeps playing.
+`switch_every` is in seconds (`"30s"`, handy to quickly try all modes), minutes (`"15m"`) or hours (`"2h"`), 1 hour by default, and lines up with the clock: `"1h"` switches on the hour. With `shuffle` every mode plays once per round, in a random order. The mode only depends on the time, so after a restart the same mode keeps playing.
+
+<a id="set-times"></a>
+## Change at set times
+
+`mode`, `brightness`, `switch_every` and `shuffle` can also be set per time. Each value applies from its time until the next one, wrapping around midnight. For example, switch between modes all day, dim in the evening and switch off at night:
+
+```json
+{
+  "mode": ["collision", "pathfinder", "pixels-fighting", "led-sort"],
+  "switch_every": "15m",
+  "brightness": { "07:00": 0.2, "21:30": 0.05, "23:00": 0 }
+}
+```
+
+Or show the clock during the day and switch between modes in the evening:
+
+```json
+{
+  "mode": { "07:00": "clock", "18:00": ["collision", "pathfinder"] },
+  "brightness": { "07:00": 0.2, "23:00": 0 }
+}
+```
+
+Every setting has its own times, so the brightness changes regardless of which mode is playing. Brightness changes fade without restarting the mode.
+
+This uses the Pi's system time, so make sure the time zone is set (`sudo raspi-config` > Localisation Options > Timezone).
 
 <a id="mode-settings"></a>
 ## Mode settings
 
-Some modes have settings. They go in `mode_settings`, under the name of the mode, and apply whenever that mode runs (also in a playlist):
+Some modes have settings. They go in `mode_settings`, under the name of the mode, and apply whenever that mode runs:
 
 ```json
 {
@@ -102,30 +128,6 @@ Some modes have settings. They go in `mode_settings`, under the name of the mode
 ```
 
 See the README of each mode for its settings.
-
-<a id="schedule"></a>
-## Schedule
-
-Change any config value at set times, for example to dim the matrix in the evening and switch it off at night.
-
-```json
-{
-  "schedule": {
-    "07:00": { "mode": "clock", "brightness": 0.2 },
-    "18:00": { "mode": ["collision", "pathfinder"], "every": "30m" },
-    "21:30": { "brightness": 0.05 },
-    "23:00": { "brightness": 0 }
-  }
-}
-```
-
-Each entry changes the keys it contains, from its time until a later entry changes them again, wrapping around midnight. In the example above the playlist keeps playing at 21:30, only dimmer, and at 07:00 the clock comes back at full brightness.
-
-Because values stay until changed, a key that is set anywhere in the schedule needs an entry that sets it back (like 07:00 above). That goes for `every` and `shuffle` too. Keep keys the schedule sets out of the rest of the config: there the schedule always wins.
-
-Entries can contain anything the config can, including `mode_settings`, for example a different ntfy.sh topic in the evening: `"18:00": { "mode_settings": { "ntfy-sh": { "topic": "..." } } }`.
-
-The schedule uses the Pi's system time, so make sure the time zone is set (`sudo raspi-config` > Localisation Options > Timezone).
 
 <a id="display"></a>
 ## Display orientation
@@ -143,7 +145,7 @@ If the matrix is mounted rotated or mirrored:
 <a id="create-a-mode"></a>
 ## Create a mode
 
-A mode is a directory in `modes/` with a `main.py`. The `core` package takes care of the hardware, config, brightness, schedule, orientation and switching the LEDs off on exit, so a mode only has to draw:
+A mode is a directory in `modes/` with a `main.py`. The `core` package takes care of the hardware, config, brightness, set times, orientation and switching the LEDs off on exit, so a mode only has to draw:
 
 ```python
 from core import Matrix, hsv

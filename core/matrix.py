@@ -1,9 +1,8 @@
 """
 The LED matrix as modes see it: an 8x8 canvas you draw on, then show().
 
-Everything that isn't mode logic lives here: config, brightness (including the
-schedule and fading), rotation/flipping, frame timing and switching the LEDs off on
-exit.
+Everything that isn't mode logic lives here: config, brightness (including changes at
+set times and fading), rotation/flipping, frame timing and switching the LEDs off on exit.
 """
 
 import atexit
@@ -22,7 +21,7 @@ from .color import BLACK
 WIDTH = 8
 HEIGHT = 8
 COUNT = WIDTH * HEIGHT
-CONFIG_CHECK_INTERVAL = 5  # seconds between checks for a scheduled brightness change
+CONFIG_CHECK_INTERVAL = 5  # seconds between checks for a brightness change
 FADE_SECONDS = 1.0  # fade in on start and on brightness changes
 FADE_OUT_SECONDS = 0.5  # fade out on exit, e.g. when switching modes
 FADE_STEPS_PER_SECOND = 30
@@ -215,7 +214,7 @@ class Matrix:
         threading.Thread(target=run, daemon=True).start()
 
     def _check_config(self):
-        """Apply scheduled brightness changes without restarting the mode."""
+        """Apply brightness changes (also at set times) without restarting the mode."""
         now = time.monotonic()
         if now < self._next_config_check:
             return
