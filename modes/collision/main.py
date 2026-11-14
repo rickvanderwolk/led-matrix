@@ -1,20 +1,9 @@
 #!/usr/bin/env python3
 
-import os
-import json
-import board
-import neopixel
-import time
 import random
+from core import Matrix, mix, scale
 
-CONFIG_PATH = os.environ.get("LEDMATRIX_CONFIG", "config.json")
-with open(CONFIG_PATH) as f:
-    config = json.load(f)
-
-LED_COUNT = 64
-PIN = board.D18
-BRIGHTNESS = config.get("brightness", 0.2)
-pixels = neopixel.NeoPixel(PIN, LED_COUNT, brightness=BRIGHTNESS, auto_write=False)
+matrix = Matrix()
 
 # 16 vibrant colors for particles
 COLORS = [
@@ -46,19 +35,6 @@ DIRECTIONS = {
     'down': (0, 1),
     'up': (0, -1),
 }
-
-
-def xy_to_index(x, y):
-    return y * 8 + x
-
-
-def mix_colors(color1, color2):
-    """Mix two colors by averaging their RGB values."""
-    return (
-        (color1[0] + color2[0]) // 2,
-        (color1[1] + color2[1]) // 2,
-        (color1[2] + color2[2]) // 2,
-    )
 
 
 class Particle:
@@ -131,7 +107,7 @@ def update():
 
         # Mix with existing trail or create new
         if pos in trails:
-            trails[pos] = mix_colors(p.color, trails[pos])
+            trails[pos] = mix(p.color, trails[pos])
             flash_positions.add(pos)  # Flash on overlap
         else:
             trails[pos] = p.color
@@ -160,43 +136,21 @@ def update():
         particles.append(spawn_particle())
 
 
-def brighten(color, factor=1.5):
-    """Make a color brighter for flash effect."""
-    return (
-        min(255, int(color[0] * factor)),
-        min(255, int(color[1] * factor)),
-        min(255, int(color[2] * factor)),
-    )
+FRAME_TIME = 0.15  # seconds
 
 
 def render():
-    # Clear display
-    pixels.fill((0, 0, 0))
+    matrix.clear()
 
-    # Draw trails (permanent color paths)
-    for (x, y), color in trails.items():
-        if 0 <= x <= 7 and 0 <= y <= 7:
-            idx = xy_to_index(x, y)
-            # Flash bright where particles crossed
-            if (x, y) in flash_positions:
-                pixels[idx] = brighten(color, 2.0)
-            else:
-                pixels[idx] = color
+    # Draw trails, flashing bright where particles crossed
+    for pos, color in trails.items():
+        matrix[pos] = scale(color, 2.0) if pos in flash_positions else color
 
     # Draw active particles (brightest)
     for p in particles:
-        if 0 <= p.x <= 7 and 0 <= p.y <= 7:
-            idx = xy_to_index(p.x, p.y)
-            pixels[idx] = brighten(p.color, 1.5)
-
-    pixels.show()
+        matrix[p.position()] = scale(p.color, 1.5)
 
 
-try:
-    while True:
-        update()
-        render()
-        time.sleep(0.15)
-except KeyboardInterrupt:
-    pixels.fill((0, 0, 0))
-    pixels.show()
+for _ in matrix.frames(fps=1 / FRAME_TIME):
+    update()
+    render()
