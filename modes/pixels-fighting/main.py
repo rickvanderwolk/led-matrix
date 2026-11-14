@@ -7,7 +7,7 @@ from core import Matrix
 matrix = Matrix()
 
 # Fight attempts per second. Before, speed depended on how fast the hardware happened to be.
-ATTEMPTS_PER_SECOND = matrix.settings.get("speed", 200)
+ATTEMPTS_PER_SECOND = matrix.settings.get("speed", 80)
 FPS = 50
 
 CONTRASTING_COLOR_PAIRS = [
